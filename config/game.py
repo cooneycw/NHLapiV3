@@ -7,7 +7,7 @@ class Game:
         self.home_team = home_team
         self.away_team = away_team
         self.season_id = season_id
-        self.play_by_play = None
+        self.playbyplay = None
         self.home_goals = None
         self.away_goals = None
         self.home_sog = None
@@ -16,7 +16,7 @@ class Game:
         self.away_players = set()
 
     def update_game(self, input_dict):
-        self.play_by_play = input_dict['play_by_play']
+        self.playbyplay = input_dict['playbyplay']
         self.home_goals = input_dict['home_goals']
         self.away_goals = input_dict['away_goals']
         self.home_sog = input_dict['home_sog']

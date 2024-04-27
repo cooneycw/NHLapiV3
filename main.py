@@ -1,15 +1,16 @@
 from config.config import Config
-from src_code.collect.collect_01 import get_season_data, get_team_list, get_game_list, get_boxscore_list, get_playbyplay_data
+from src_code.collect.collect_01 import get_season_data, get_team_list, get_game_list, get_boxscore_list, get_playbyplay_data, get_playernames
 
 
 def main():
     config_dict = {
-        "season_count": 1,
+        "season_count": 5,
         "delete_pickles": False,
         "reload_seasons": False,
         "reload_teams": False,
         "reload_games": False,
-        "reload_boxscores": True,
+        "reload_boxscores": False,
+        "reload_playernames": False,
         "reload_playbyplay": True,
     }
     config = Config(config_dict)
@@ -21,7 +22,9 @@ def get_data(config):
     get_team_list(config)
     get_game_list(config)
     get_boxscore_list(config)
+    get_playernames(config)
     get_playbyplay_data(config)
+
     cwc = 0
     # asyncio.run(get_boxscore_list(config))
     # asyncio.run(get_rosters(config))

@@ -5,6 +5,7 @@ from config.playbyplay import PlayByPlay
 from config.season import Season
 from config.team import Team
 from config.game import Game
+from config.player import Player, PlayerGameStats
 from datetime import datetime
 
 
@@ -20,6 +21,7 @@ class Config:
             "standings": "{base_url}/v1/standings/now",
             "schedule": "{base_url}/v1/club-schedule-season/{team}/{season}",
             "boxscore": "{base_url}/v1/gamecenter/{game_id}/boxscore",
+            "player": "{base_url}/v1/player/{player_id}/landing",
             "roster": "{base_url}/v1/roster/{team}/current",
             "lines": "{base_url_lines}/teams/{line_team}/line-combinations",
         }
@@ -30,6 +32,8 @@ class Config:
             "all_teams": os.path.join(self.current_path, "storage", "pickles", "all_teams.pkl"),
             "all_games": os.path.join(self.current_path, "storage", "pickles", "all_games.pkl"),
             "all_boxscores": os.path.join(self.current_path, "storage", "pickles", "all_boxscores.pkl"),
+            "all_players": os.path.join(self.current_path, "storage", "pickles", "all_players.pkl"),
+            "all_names": os.path.join(self.current_path, "storage", "pickles", "all_names.pkl"),
             "all_shifts": os.path.join(self.current_path, "storage", "pickles", "all_shifts.pkl"),
         }
 
@@ -42,16 +46,15 @@ class Config:
         self.reload_teams = input_dict.get("reload_teams", True)
         self.reload_games = input_dict.get("reload_games", True)
         self.reload_boxscores = input_dict.get("reload_boxscores", True)
-        self.reload_playbyplay = input_dict.get("reload_boxscores", True)
+        self.reload_players = input_dict.get("reload_boxscores", True)
+        self.reload_playernames = input_dict.get("reload_playernames", True)
+        self.reload_playbyplay = input_dict.get("reload_playbyplay", True)
         self.Season = Season
-        self.seasons = set()
         self.Team = Team
-        self.teams = set()
         self.Game = Game
-        self.games = set()
+        self.Player = Player
+        self.PlayerGameStats = PlayerGameStats
         self.PlayByPlay = PlayByPlay
-        self.shifts = set()
-        self.boxscores = set()
         self.rosters = None
         self.player_list = None
         self.lines = None
