@@ -228,14 +228,16 @@ def process_boxscore(data):
 
 
 def get_playbyplay_data(config):
-    dimension = "all_shifts"
-    prior_data = config.load_data(dimension)
-    if prior_data and config.reload_playbyplay is False:
-        for results in prior_data:
-            game_obj = config.PlayByPlay.get_shift(results['shift_id'])
-            process_boxscore(game_obj, results)
-    if (prior_data is None) or (config.reload_playbyplay is True):
-        save_results = []
+    dimension_shifts = "all_shifts"
+    dimension_plays = "all_plays"
+    prior_data_shifts = config.load_data(dimension_shifts)
+    prior_data_plays = config.load_data(dimension_plays)
+    if prior_data_shifts and config.reload_playbyplay is False:
+        for results in prior_data_shifts:
+            cwc = 0
+    if (prior_data_shifts is None) or (config.reload_playbyplay is True):
+        save_results_shifts = []
+        save_results_plays = []
         for game in config.Game.get_games():
             print(f'Getting shift data for {game[0]}:{game[2]}:{game[3]}')
             game_obj = config.Game.get_game(game[0])
@@ -243,19 +245,23 @@ def get_playbyplay_data(config):
             response = requests.get(final_url)
             response.raise_for_status()  # Ensure the response is OK
             soup = BeautifulSoup(response.text, 'html.parser')
-            game_obj = config.Game.get_game(game[0])
-            results = process_shifts(config, soup)
-            for result in results:
-                cwc = 0
-                # define shifts here
-            save_results.append(results)
-            game_obj.update_game(results)
-        # Set the games in the config, assuming this modifies some shared state or configuration
-        config.save_data(dimension, save_results)
+            results_shifts = process_shifts(config, soup)
+
+            final_url_plays = config.get_endpoint("plays", game_id=game[0])
+            response_plays = requests.get(final_url_plays)
+            response_plays.raise_for_status()  # Ensure the response is OK
+            data_plays = response_plays.json()
+            results_plays = process_plays(data_plays)
+
+            # game_obj = config.Game.get_game(game[0])
+
+            save_results_shifts.append(results_shifts)
+            save_results_plays.append(results_plays)
+            # game_obj.update_game(results)
+        config.save_data(dimension_shifts, save_results_shifts)
 
 
 def process_shifts(config, soup):
-    full_data_len = 54
     shifts = []
     pages = soup.find_all('div', class_='page')
 
@@ -292,31 +298,63 @@ def process_shifts(config, soup):
                 shifts.append(shift)
                 continue
             else:
+                num_away_players = len(tds[6].find_all('table')) - 1
                 away_players = []
-                away_player_list = [7, 11, 15, 19, 23, 27]
+                away_player_list = [7 + (4 * x) for x in range(0, num_away_players)]
+                # away_player_cells = len(tds[6].find_all('td', class_='+ bborder + rborder'))
+
+                if num_away_players < 5:
+                    cwc = 0
                 for away_player in away_player_list:
-                    try:
-                        sweater_number, position = split_data(tds[away_player].get_text(strip=True))
-                    except Exception as e:
-                        print(e)
-                        cwc = 0
+                    sweater_number, position = split_data(tds[away_player].get_text(strip=True))
                     away_players.append((sweater_number, position))
                 shift['away_players'] = away_players
 
+                home_tds_ind = max(away_player_list) + 3
+                num_home_players = len(tds[home_tds_ind].find_all('table')) - 1
                 home_players = []
-                home_player_list = [31, 35, 39, 43, 47, 51]
-                for home_player in home_player_list:
-                    try:
-                        sweater_number, position = split_data(tds[home_player].get_text(strip=True))
-                    except Exception as e:
-                        print(e)
-                        cwc = 0
-                    home_players.append((sweater_number, position))
+                home_player_list = [home_tds_ind + 1 + (4 * x) for x in range(0, num_home_players)]
 
+                if num_home_players < 5:
+                    cwc = 0
+                for home_player in home_player_list:
+                    sweater_number, position = split_data(tds[home_player].get_text(strip=True))
+                    home_players.append((sweater_number, position))
                 shift['home_players'] = home_players
                 shifts.append(shift)
 
     return shifts
+
+
+def process_plays(data):
+    plays = list()
+    for play in data['plays']:
+        shift = dict()
+        shift['game_id'] = data['id']
+        shift['event_id'] = data['event_id']
+        shift['period'] = data['periodDescriptor']['number']
+        shift['period_type'] = data['periodDescriptor']['periodType']
+        shift['elapsed_time'] = data['timeInPeriod']
+        shift['game_time'] = data['timeRemaining']
+        shift['event_type'] = data['typeDescKey']
+        if data.get('details') is not None:
+            faceoff_winner = data['details'].get('winningPlayerId', None)
+            faceoff_loser = data['details'].get('losingPlayerId', None)
+            goal_scorer = data['details'].get('scoringPlayerId', None)
+            goal_assist1 = data['details'].get('assist1PlayerId', None)
+            goal_assist2 = data['details'].get('assist2PlayerId', None)
+            goal_against = data['details'].get('goalieInNetId', None)
+            if data['details'].get('typeDescKey', None) == 'missed-shot':
+                shot_attempt = data['details'].get('shootingPlayerId', None)
+            if data['details'].get('typeDescKey', None) == 'delayed-penalty':
+                delayed_penalty = data['details'].get('eventOwnerTeamId', None)
+            if data['details'].get('typeDescKey', None) == 'penalty':
+                penalized_player = data['details'].get('committedByPlayerId', None)
+                penalized_infraction = data['details'].get('descKey', None)
+
+
+        plays.append(shift)
+    return plays
 
 
 def get_playernames(config):

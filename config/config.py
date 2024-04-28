@@ -24,6 +24,7 @@ class Config:
             "player": "{base_url}/v1/player/{player_id}/landing",
             "roster": "{base_url}/v1/roster/{team}/current",
             "lines": "{base_url_lines}/teams/{line_team}/line-combinations",
+            "plays": "{base_url}/v1/gamecenter/{game_id}/play-by-play",
         }
 
         self.current_path = os.getcwd()
@@ -35,6 +36,7 @@ class Config:
             "all_players": os.path.join(self.current_path, "storage", "pickles", "all_players.pkl"),
             "all_names": os.path.join(self.current_path, "storage", "pickles", "all_names.pkl"),
             "all_shifts": os.path.join(self.current_path, "storage", "pickles", "all_shifts.pkl"),
+            "all_plays": os.path.join(self.current_path, "storage", "pickles", "all_plays.pkl"),
         }
 
         self.curr_date = datetime.now().date()
