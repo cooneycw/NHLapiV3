@@ -5,12 +5,12 @@ from src_code.collect.collect_01 import get_season_data, get_team_list, get_game
 def main():
     config_dict = {
         "season_count": 5,
-        "delete_pickles": False,
-        "reload_seasons": False,
-        "reload_teams": False,
-        "reload_games": False,
-        "reload_boxscores": False,
-        "reload_playernames": False,
+        "delete_pickles": True,
+        "reload_seasons": True,
+        "reload_teams": True,
+        "reload_games": True,
+        "reload_boxscores": True,
+        "reload_playernames": True,
         "reload_playbyplay": True,
     }
     config = Config(config_dict)
