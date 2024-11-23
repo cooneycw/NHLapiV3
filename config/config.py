@@ -11,6 +11,7 @@ from datetime import datetime
 
 class Config:
     def __init__(self, input_dict):
+        self.verbose = input_dict['verbose']
         self.base_url = "https://api-web.nhle.com"
         self.base_url_lines = "https://www.dailyfaceoff.com"
         self.headers_lines = {
@@ -20,7 +21,8 @@ class Config:
             "seasons": "{base_url}/v1/season",
             "standings": "{base_url}/v1/standings/now",
             "schedule": "{base_url}/v1/club-schedule-season/{team}/{season}",
-            "boxscore": "{base_url}/v1/gamecenter/{game_id}/boxscore",
+            "boxscore_v1": "{base_url}/v1/gamecenter/{game_id}/boxscore",
+            "boxscore_v2": "{base_url}/v1/gamecenter/{game_id}/right-rail",
             "player": "{base_url}/v1/player/{player_id}/landing",
             "roster": "{base_url}/v1/roster/{team}/current",
             "lines": "{base_url_lines}/teams/{line_team}/line-combinations",
@@ -37,6 +39,7 @@ class Config:
             "all_names": os.path.join(self.current_path, "storage", "pickles", "all_names.pkl"),
             "all_shifts": os.path.join(self.current_path, "storage", "pickles", "all_shifts.pkl"),
             "all_plays": os.path.join(self.current_path, "storage", "pickles", "all_plays.pkl"),
+            "all_rosters": os.path.join(self.current_path, "storage", "pickles", "all_rosters.pkl"),
         }
 
         self.curr_date = datetime.now().date()
@@ -51,6 +54,7 @@ class Config:
         self.reload_players = input_dict.get("reload_boxscores", True)
         self.reload_playernames = input_dict.get("reload_playernames", True)
         self.reload_playbyplay = input_dict.get("reload_playbyplay", True)
+        self.reload_rosters = input_dict.get("reload_rosters", True)
         self.Season = Season
         self.Team = Team
         self.Game = Game

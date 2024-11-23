@@ -1,10 +1,11 @@
 from config.config import Config
-from src_code.collect.collect_01 import get_season_data, get_team_list, get_game_list, get_boxscore_list, get_playbyplay_data, get_playernames
+from src_code.collect.collect_01 import get_season_data, get_team_list, get_game_list, get_boxscore_list, get_playbyplay_data, get_player_names
 
 
 def main():
     config_dict = {
-        "season_count": 5,
+        "verbose": True,
+        "season_count": 1,
         "delete_pickles": True,
         "reload_seasons": True,
         "reload_teams": True,
@@ -12,6 +13,7 @@ def main():
         "reload_boxscores": True,
         "reload_playernames": True,
         "reload_playbyplay": True,
+        "reload_rosters": True,
     }
     config = Config(config_dict)
     get_data(config)
@@ -22,7 +24,7 @@ def get_data(config):
     get_team_list(config)
     get_game_list(config)
     get_boxscore_list(config)
-    get_playernames(config)
+    get_player_names(config)
     get_playbyplay_data(config)
 
     cwc = 0
