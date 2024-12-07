@@ -263,6 +263,8 @@ def get_playbyplay_data(config):
         save_results_plays = []
         save_results_game_rosters = []
         for game in config.Game.get_games():
+            if game[1].date() >= config.curr_date:
+                continue
             print(f'Getting shift data for {game[0]}:{game[2]}:{game[3]}')
             game_obj = config.Game.get_game(game[0])
             final_url = game_obj.playbyplay
