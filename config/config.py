@@ -40,7 +40,7 @@ class Config:
             "all_names": os.path.join(self.current_path, "storage", "pickles", "all_names.pkl"),
             "all_shifts": os.path.join(self.current_path, "storage", "pickles", "all_shifts.pkl"),
             "all_plays": os.path.join(self.current_path, "storage", "pickles", "all_plays.pkl"),
-            "all_rosters": os.path.join(self.current_path, "storage", "pickles", "all_rosters.pkl"),
+            "all_game_rosters": os.path.join(self.current_path, "storage", "pickles", "all_game_rosters.pkl"),
         }
 
         self.curr_date = datetime.now().date()

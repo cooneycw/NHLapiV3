@@ -253,8 +253,10 @@ def get_playbyplay_data(config):
     print(f'Gathering play by play data...')
     dimension_shifts = "all_shifts"
     dimension_plays = "all_plays"
+    dimension_game_rosters = "all_game_rosters"
     prior_data_shifts = config.load_data(dimension_shifts)
     prior_data_plays = config.load_data(dimension_plays)
+    prior_data_game_rosters = config.load_data(dimension_game_rosters)
     if prior_data_shifts and config.reload_playbyplay is False:
         for results in prior_data_plays:
             cwc = 0
@@ -286,7 +288,9 @@ def get_playbyplay_data(config):
             save_results_plays.append(results_plays)
             save_results_game_rosters.append(results_game_rosters)
             # game_obj.update_game(results)
-        config.save_data(dimension_shifts, save_results_shifts, save_results_plays, save_results_game_rosters)
+        config.save_data(dimension_shifts, save_results_shifts)
+        config.save_data(dimension_plays, save_results_plays)
+        config.save_data(dimension_game_rosters, save_results_game_rosters)
 
 
 def process_shifts(config, soup):
