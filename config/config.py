@@ -65,6 +65,7 @@ class Config:
         self.rosters = None
         self.player_list = None
         self.lines = None
+        self.event_categ = self.event_registry()
 
     def get_endpoint(self, key, **kwargs):
         """Construct and return the full URL for a given endpoint key with placeholders replaced by kwargs."""
@@ -96,4 +97,17 @@ class Config:
                 pickle.dump(data, file)
         except Exception as e:
             print(f"Error saving data to {self.file_paths[dimension]}: {str(e)}")
+
+    @staticmethod
+    def event_registry():
+        event_categ = dict()
+        event_categ[502] = {
+            'event_name': 'Faceoff',
+            'sport_stat': True,
+        }
+        event_categ[520] = {
+            'event_name': 'Game Start',
+            'sport_stat': False,
+        }
+        return event_categ
 

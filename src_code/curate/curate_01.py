@@ -1,5 +1,44 @@
+from src_code.utils.utils import period_time_to_game_time, game_time_to_period_time, create_player_dict
+
+
 def curate_data(config):
-    cwc = 0
+    dimension_shifts = "all_shifts"
+    dimension_plays = "all_plays"
+    dimension_game_rosters = "all_game_rosters"
+    dimension_games = "all_boxscores"
+    dimension_players = "all_players"
+
+    data_games = config.load_data(dimension_games)
+    data_players = config.load_data(dimension_players)
+    data_shifts = config.load_data(dimension_shifts)
+    data_plays = config.load_data(dimension_plays)
+    data_game_roster = config.load_data(dimension_game_rosters)
+
+    game_id = []
+    game_date = []
+    home_id = []
+    away_id = []
+    period_id = []
+    time_index = []
+    shift_id = []
+    time_on_ice = []
+    player_dict = create_player_dict(data_players)
+
+    i_shift = 0
+    event_categ = config.event_categ
+    for i_game, game in enumerate(data_plays):
+        for i_event, event in enumerate(game):
+            event_details = event_categ.get(event['event_code'])
+            if event_details is None:
+                cwc = 0
+            if not event_details['sport_stat']:
+                continue
+            if event['away_players'] == [] and event['home_players'] == []:
+                continue
+
+            cwc = 0
+
+
     pass
     # config = load_data()
     # curate_basic_stats(config, curr_date)
