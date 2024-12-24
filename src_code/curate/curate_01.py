@@ -1,4 +1,4 @@
-from src_code.utils.utils import period_time_to_game_time, game_time_to_period_time, create_player_dict
+from src_code.utils.utils import period_time_to_game_time, game_time_to_period_time, create_player_dict, decompose_lines, create_roster_dicts
 
 
 def curate_data(config):
@@ -30,8 +30,10 @@ def curate_data(config):
     event_categ = config.event_categ
     shift_categ = config.shift_categ
     for i_game, game in enumerate(data_plays):
+        away_team = data_games[i_game]['awayTeam']
+        home_team = data_games[i_game]['homeTeam']
+        away_players, home_players = create_roster_dicts(data_game_roster[i_game], away_team, home_team)
         for i_event, event in enumerate(game):
-
             event_details = event_categ.get(event['event_code'])
             if event_details is None:
                 cwc = 0
