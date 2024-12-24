@@ -30,8 +30,8 @@ def period_time_to_game_time(period, time_str):
         if len(parts) != 2:
             raise ValueError("Input must be in 'period:mm:ss' format.")
 
-        minutes = int(parts[1])
-        seconds = int(parts[2])
+        minutes = int(parts[0])
+        seconds = int(parts[1])
 
         if period < 1:
             raise ValueError("Period must be at least 1.")
@@ -46,7 +46,7 @@ def period_time_to_game_time(period, time_str):
 
         return elapsed_time
     except Exception as e:
-        raise ValueError(f"Invalid input '{period}: {time_str}': {e}")
+        raise ValueError(f"Invalid input '{period}: {round(time_str,3)}': {e}")
 
 
 def game_time_to_period_time(game_time):
@@ -83,7 +83,20 @@ def game_time_to_period_time(game_time):
 
     return period, f"{minutes:02d}:{seconds:02d}"
 
-def create_player_dict(data_players):
+def create_player_dict(data_names):
+    player_list = []
     dict_of_players = {}
-    cwc =0
-    return dict_of_players
+    for i, player in enumerate(data_names):
+        player_id = player['playerId']
+        retrieve_test = dict_of_players.get(player_id, False)
+        if not retrieve_test:
+            player_list.append(player_id)
+            dict_of_players[player_id] = {
+                'lastName': player['lastName']['default'],
+                'firstName': player['firstName']['default'],
+                'sweaterNumber': player.get('sweaterNumber', -1),
+            }
+        else:
+            cwc = 0
+
+    return player_list, dict_of_players

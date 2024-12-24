@@ -66,6 +66,7 @@ class Config:
         self.player_list = None
         self.lines = None
         self.event_categ = self.event_registry()
+        self.shift_categ = self.shift_registry()
 
     def get_endpoint(self, key, **kwargs):
         """Construct and return the full URL for a given endpoint key with placeholders replaced by kwargs."""
@@ -99,10 +100,35 @@ class Config:
             print(f"Error saving data to {self.file_paths[dimension]}: {str(e)}")
 
     @staticmethod
+    def shift_registry():
+        shift_categ = dict()
+        shift_categ['PGSTR'] = {
+            'shift_name': 'pregame-start',
+            'sport_stat': False,
+        }
+        shift_categ['PGEND'] = {
+            'shift_name': 'pregame-end',
+            'sport_stat': False,
+        }
+        shift_categ['ANTHEM'] = {
+            'shift_name': 'pregame-anthem',
+            'sport_stat': False,
+        }
+        shift_categ['PSTR'] = {
+            'shift_name': 'period-start',
+            'sport_stat': False,
+        }
+        shift_categ['FAC'] = {
+            'shift_name': 'faceoff',
+            'sport_stat': True,
+        }
+        return shift_categ
+
+    @staticmethod
     def event_registry():
         event_categ = dict()
         event_categ[502] = {
-            'event_name': 'Faceoff',
+            'event_name': 'faceoff',
             'sport_stat': True,
         }
         event_categ[520] = {

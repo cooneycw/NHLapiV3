@@ -196,6 +196,8 @@ def process_forward_defense_data(data):
 def process_boxscore(game_id, data_v1, data_v2):
     results = dict()
     results['id'] = game_id
+    results['awayTeam'] = data_v1['awayTeam']['abbrev']
+    results['homeTeam'] = data_v1['homeTeam']['abbrev']
     if data_v1['gameState'] != 'OFF':
         if data_v1['gameState'] == 'FUT':
             print(f'game_id: {game_id} {data_v1["awayTeam"]["name"]["default"]} vs {data_v1["homeTeam"]["name"]["default"]} postponed...')

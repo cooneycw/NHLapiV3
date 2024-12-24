@@ -2,12 +2,14 @@ from src_code.utils.utils import period_time_to_game_time, game_time_to_period_t
 
 
 def curate_data(config):
+    dimension_names = "all_names"
     dimension_shifts = "all_shifts"
     dimension_plays = "all_plays"
     dimension_game_rosters = "all_game_rosters"
     dimension_games = "all_boxscores"
     dimension_players = "all_players"
 
+    data_names = config.load_data(dimension_names)
     data_games = config.load_data(dimension_games)
     data_players = config.load_data(dimension_players)
     data_shifts = config.load_data(dimension_shifts)
@@ -22,17 +24,33 @@ def curate_data(config):
     time_index = []
     shift_id = []
     time_on_ice = []
-    player_dict = create_player_dict(data_players)
+    player_list, player_dict = create_player_dict(data_names)
 
     i_shift = 0
     event_categ = config.event_categ
+    shift_categ = config.shift_categ
     for i_game, game in enumerate(data_plays):
         for i_event, event in enumerate(game):
+
             event_details = event_categ.get(event['event_code'])
             if event_details is None:
                 cwc = 0
             if not event_details['sport_stat']:
                 continue
+            game_time_event = period_time_to_game_time(event['period'], event['game_time'])
+            while True:
+                compare_shift = data_shifts[i_game][i_shift]
+                shift_details = shift_categ.get(compare_shift['event_type'])
+                if shift_details is None:
+                    cwc = 0
+                if not shift_details['sport_stat']:
+                    i_shift += 1
+                    continue
+                break
+            game_time_shift = period_time_to_game_time(event['period'], event['game_time'])
+
+            if event_details['event_name'] == 'faceoff' and shift_details['shift_name'] == 'faceoff' and game_time_event == game_time_shift:
+                cwc = 0
             if event['away_players'] == [] and event['home_players'] == []:
                 continue
 
