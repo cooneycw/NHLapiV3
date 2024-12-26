@@ -44,9 +44,9 @@ def period_time_to_game_time(period, time_str):
         elapsed_time = (period - 1) * 20
         elapsed_time += (20 - minutes - seconds / 60)
 
-        return elapsed_time
+        return round(elapsed_time, 3)
     except Exception as e:
-        raise ValueError(f"Invalid input '{period}: {round(time_str,3)}': {e}")
+        raise ValueError(f"Invalid input '{period}: {time_str}': {e}")
 
 
 def game_time_to_period_time(game_time):
@@ -129,6 +129,21 @@ def create_player_dict(data_names):
 
     return player_list, dict_of_players
 
+
+def create_player_stats(player_id):
+    player_stats = {
+        'player_id': player_id,
+        'power_play': 0,
+        'hit_another_player': 0,
+        'hit_by_player': 0,
+        'shot_attempt': 0,
+        'shot_on_goal': 0,
+        'shot_blocked': 0,
+        'faceoff_taken': 0,
+        'faceoff_won': 0,
+        'goal': 0,
+    }
+    return player_stats
 
 def decompose_lines():
     cwc = 0

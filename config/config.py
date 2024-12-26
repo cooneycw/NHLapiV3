@@ -122,6 +122,10 @@ class Config:
             'shift_name': 'faceoff',
             'sport_stat': True,
         }
+        shift_categ['HIT'] = {
+            'shift_name': 'hit',
+            'sport_stat': True,
+        }
         return shift_categ
 
     @staticmethod
@@ -131,8 +135,12 @@ class Config:
             'event_name': 'faceoff',
             'sport_stat': True,
         }
+        event_categ[503] = {
+            'event_name': 'hit',
+            'sport_stat': True,
+        }
         event_categ[520] = {
-            'event_name': 'Game Start',
+            'event_name': 'game-start',
             'sport_stat': False,
         }
         return event_categ
