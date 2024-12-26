@@ -390,6 +390,8 @@ def process_plays(data):
         if play.get('details') is not None:
             shift['faceoff_winner'] = play['details'].get('winningPlayerId', None)
             shift['faceoff_loser'] = play['details'].get('losingPlayerId', None)
+            shift['hitting_player'] = play['details'].get('hittingPlayerId', None)
+            shift['hittee_player'] = play['details'].get('hitteePlayerId', None)
             shift['goal_scorer'] = play['details'].get('scoringPlayerId', None)
             shift['goal_assist1'] = play['details'].get('assist1PlayerId', None)
             shift['goal_assist2'] = play['details'].get('assist2PlayerId', None)

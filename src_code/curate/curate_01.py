@@ -100,31 +100,47 @@ def curate_data(config):
                     face_off_winner = last_event['face_off_winner']
                     face_off_loser = last_event['face_off_loser']
 
+                hitter = None
+                hittee = None
+                if event_details == 'hit':
+                    hitter = event['hitting_player']
+                    hittee = event['hittee_player']
+
                 for away_player in last_compare_shift['away_players']:
-                    away_player_stats = create_player_stats(away_players[int(away_player[0])]['player_id'])
+                    away_player_stats = create_player_stats(away_players[int(away_player[0])])
                     if face_off_winner is not None:
                         if away_player_stats['player_id'] == face_off_winner or away_player_stats['player_id'] == face_off_loser:
                             away_player_stats['faceoff'] = 1
                             if away_player_stats['player_id'] == face_off_winner:
                                 away_player_stats['face_off_winner'] = 1
+                    if hitter is not None:
+                        if away_player_stats['player_id'] == hitter:
+                            away_player_stats['hit_another_player'] = 1
+                        if away_player_stats['player_id'] == hittee:
+                            away_player_stats['hit_by_player'] = 1
 
+                cwc = 0
                 away_players_stats.append(away_player_stats)
 
-
                 for home_player in last_compare_shift['home_players']:
-                    home_player_stats = create_player_stats(away_players[int(home_player[0])]['player_id'])
+                    home_player_stats = create_player_stats(home_players[int(home_player[0])])
                     if face_off_winner is not None:
                         if home_player_stats['player_id'] == face_off_winner or home_player_stats['player_id'] == face_off_loser:
                             home_player_stats['faceoff'] = 1
                             if home_player_stats['player_id'] == face_off_winner:
                                 home_player_stats['face_off_winner'] = 1
+                    if hitter is not None:
+                        if home_player_stats['player_id'] == hitter:
+                            home_player_stats['hit_another_player'] = 1
+                        if home_player_stats['player_id'] == hittee:
+                            home_player_stats['hit_by_player'] = 1
 
+                cwc = 0
                 home_players_stats.append(home_player_stats)
 
-
-
-                last_event = event
-                last_compare_shift = compare_shift
+                last_event = copy.deepcopy(event)
+                last_event_details = copy.deepcopy(event_details)
+                last_compare_shift = copy.deepcopy(compare_shift)
             i_shift += 1
 
 
