@@ -133,7 +133,9 @@ def create_player_dict(data_names):
 def create_player_stats(player_id):
     player_stats = {
         'player_id': player_id['player_id'],
+        'player_team': player_id['player_team'],
         'player_position': player_id['player_position'],
+        'toi': 0,
         'power_play': 0,
         'hit_another_player': 0,
         'hit_by_player': 0,

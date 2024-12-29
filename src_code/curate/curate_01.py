@@ -27,8 +27,7 @@ def curate_data(config):
     teams_empty_net = []
     delayed_penalty = []
     skaters = []
-    away_players_stats = []
-    home_players_stats = []
+    player_data = []
 
     player_list, player_dict = create_player_dict(data_names)
 
@@ -40,8 +39,7 @@ def curate_data(config):
         home_team = data_games[i_game]['homeTeam']
         away_players, home_players = create_roster_dicts(data_game_roster[i_game], away_team, home_team)
         last_event = None
-        last_event_details = None
-        last_compare_shift = None
+
         for i_event, event in enumerate(game):
             event_details = event_categ.get(event['event_code'])
             if event_details is None:
@@ -60,12 +58,15 @@ def curate_data(config):
                 break
             game_time_shift = period_time_to_game_time(event['period'], event['game_time'])
 
-            if event_details['event_name'] == 'faceoff' and shift_details['shift_name'] == 'faceoff' and game_time_event == game_time_shift:
-                last_event = copy.deepcopy(event)
-                last_event_details = copy.deepcopy(event_details)
-                last_compare_shift = copy.deepcopy(compare_shift)
-            elif event_details['event_name'] == 'hit' and shift_details['shift_name'] == 'hit' and game_time_event == game_time_shift:
-                last_game_time_event = period_time_to_game_time(last_event['period'], last_event['game_time'])
+            if (event_details['event_name'] == shift_details['shift_name']) and (game_time_event == game_time_shift):
+                empty_net_data = process_empty_net(compare_shift)
+                if event_details['event_name'] == 'faceoff':
+                    player_stats = process_faceoff(event, compare_shift, away_players, home_players)
+                elif event_details['event_name'] == 'hit':
+                    player_stats = process_hit(event, compare_shift, away_players, home_players, last_event, game_time_event)
+                else:
+                    cwc = 0
+
                 game_id.append(game[i_event]['game_id'])
                 game_date.append(data_games[i_game]['game_date'])
                 teams.append((away_team, home_team))
@@ -74,75 +75,10 @@ def curate_data(config):
                 event_id.append(i_event)
                 shift_id.append(i_shift)
 
-                time_on_ice.append(game_time_shift - last_game_time_event)
-                away_empty_net = True
-                away_skaters = 0
-                for away_player in last_compare_shift['away_players']:
-                    if away_player[1] == 'G':
-                        away_empty_net = False
-                    else:
-                        away_skaters += 1
-
-                home_empty_net = True
-                home_skaters = 0
-                for home_player in last_compare_shift['home_players']:
-                    if home_player[1] == 'G':
-                        home_empty_net = False
-                    else:
-                        home_skaters += 1
-
-                skaters.append((away_skaters, home_skaters))
-                teams_empty_net.append((away_empty_net, home_empty_net))
-
-                face_off_winner = None
-                face_off_loser = None
-                if last_event_details == 'faceoff':
-                    face_off_winner = last_event['face_off_winner']
-                    face_off_loser = last_event['face_off_loser']
-
-                hitter = None
-                hittee = None
-                if event_details == 'hit':
-                    hitter = event['hitting_player']
-                    hittee = event['hittee_player']
-
-                for away_player in last_compare_shift['away_players']:
-                    away_player_stats = create_player_stats(away_players[int(away_player[0])])
-                    if face_off_winner is not None:
-                        if away_player_stats['player_id'] == face_off_winner or away_player_stats['player_id'] == face_off_loser:
-                            away_player_stats['faceoff'] = 1
-                            if away_player_stats['player_id'] == face_off_winner:
-                                away_player_stats['face_off_winner'] = 1
-                    if hitter is not None:
-                        if away_player_stats['player_id'] == hitter:
-                            away_player_stats['hit_another_player'] = 1
-                        if away_player_stats['player_id'] == hittee:
-                            away_player_stats['hit_by_player'] = 1
-
-                cwc = 0
-                away_players_stats.append(away_player_stats)
-
-                for home_player in last_compare_shift['home_players']:
-                    home_player_stats = create_player_stats(home_players[int(home_player[0])])
-                    if face_off_winner is not None:
-                        if home_player_stats['player_id'] == face_off_winner or home_player_stats['player_id'] == face_off_loser:
-                            home_player_stats['faceoff'] = 1
-                            if home_player_stats['player_id'] == face_off_winner:
-                                home_player_stats['face_off_winner'] = 1
-                    if hitter is not None:
-                        if home_player_stats['player_id'] == hitter:
-                            home_player_stats['hit_another_player'] = 1
-                        if home_player_stats['player_id'] == hittee:
-                            home_player_stats['hit_by_player'] = 1
-
-                cwc = 0
-                home_players_stats.append(home_player_stats)
-
+                player_data.append(player_stats)
                 last_event = copy.deepcopy(event)
-                last_event_details = copy.deepcopy(event_details)
-                last_compare_shift = copy.deepcopy(compare_shift)
-            i_shift += 1
 
+                i_shift += 1
 
 
     pass
@@ -164,4 +100,84 @@ def curate_data(config):
     #     curate_rolling_player_stats(config, curr_date, first_days, days=days)
     #     curate_proj_player_data(config, curr_date, first_days, days=days)
 
+def process_empty_net(compare_shift):
+    ret_dict = {}
 
+    away_empty_net = True
+    away_skaters = 0
+    for away_player in compare_shift['away_players']:
+        if away_player[1] == 'G':
+            away_empty_net = False
+        else:
+            away_skaters += 1
+
+    home_empty_net = True
+    home_skaters = 0
+    for home_player in compare_shift['home_players']:
+        if home_player[1] == 'G':
+            home_empty_net = False
+        else:
+            home_skaters += 1
+
+    ret_dict['away_empty_net'] = away_empty_net
+    ret_dict['away_skaters'] = away_skaters
+    ret_dict['home_empty_net'] = home_empty_net
+    ret_dict['home_skaters'] = home_skaters
+
+    return ret_dict
+
+
+def process_faceoff(event, compare_shift, away_players, home_players):
+    player_stats = []
+    for away_player in compare_shift['away_players']:
+        player_id = away_players[int(away_player[0])]
+        away_player_stats = create_player_stats(player_id)
+        if (event['faceoff_winner'] == player_id['player_id']) or (event['faceoff_loser'] == player_id['player_id']):
+            away_player_stats['faceoff_taken'] += 1
+            if event['faceoff_winner'] == player_id['player_id']:
+                away_player_stats['faceoff_won'] += 1
+        player_stats.append(away_player_stats)
+
+    for home_player in compare_shift['home_players']:
+        player_id = home_players[int(home_player[0])]
+        home_player_stats = create_player_stats(player_id)
+        if (event['faceoff_winner'] == player_id['player_id']) or (event['faceoff_loser'] == player_id['player_id']):
+            home_player_stats['faceoff_taken'] += 1
+            if event['faceoff_winner'] == player_id['player_id']:
+                home_player_stats['faceoff_won'] += 1
+        player_stats.append(home_player_stats)
+
+    return player_stats
+
+
+def process_hit(event, compare_shift, away_players, home_players, last_event, game_time_event):
+    player_stats = []
+    toi = calc_toi(game_time_event, last_event)
+
+    for away_player in compare_shift['away_players']:
+        player_id = away_players[int(away_player[0])]
+        away_player_stats = create_player_stats(player_id)
+        away_player_stats['toi'] += toi
+        if event['hitting_player'] == player_id['player_id']:
+            away_player_stats['hit_another_player'] += 1
+        if event['hittee_player'] == player_id['player_id']:
+            away_player_stats['hit_by_player'] += 1
+        player_stats.append(away_player_stats)
+
+    for home_player in compare_shift['home_players']:
+        player_id = home_players[int(home_player[0])]
+        home_player_stats = create_player_stats(player_id)
+        home_player_stats['toi'] += toi
+        if event['hitting_player'] == player_id['player_id']:
+            home_player_stats['hit_another_player'] += 1
+        if event['hittee_player'] == player_id['player_id']:
+            home_player_stats['hit_by_player'] += 1
+        player_stats.append(home_player_stats)
+
+    return player_stats
+
+
+def calc_toi(game_time_event, last_event):
+    last_game_time_event = period_time_to_game_time(last_event['period'], last_event['game_time'])
+    toi = game_time_event - last_game_time_event
+    return toi
