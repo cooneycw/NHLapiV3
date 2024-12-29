@@ -139,6 +139,7 @@ def create_player_stats(player_id):
         'power_play': 0,
         'hit_another_player': 0,
         'hit_by_player': 0,
+        'giveaways': 0,
         'shot_attempt': 0,
         'shot_on_goal': 0,
         'shot_blocked': 0,

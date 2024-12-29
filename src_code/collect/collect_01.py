@@ -328,7 +328,7 @@ def process_shifts(config, soup):
             shift['event_type'] = tds[4].get_text(strip=True)
             shift['desc'] = tds[5].get_text(strip=True)
 
-            if len(tds) < 11 or (shift['event_type'] == 'PSTR'):
+            if len(tds) < 11 or (shift['event_type'] in ['PSTR', 'PGEND', 'GEND', 'ANTHEM']):
                 shift['away_players'] = []
                 shift['home_players'] = []
                 shifts.append(shift)
@@ -400,8 +400,13 @@ def process_plays(data):
             shift['delayed_penalty'] = None
             shift['penalized_player'] = None
             shift['penalized_infraction'] = None
+            if play['details'].get('typeDescKey', None) == 'shot-on-goal':
+                shift['shot_attempt'] = data['details'].get('shootingPlayerId', None)
+                shift['saving_goalie'] = data['details'].get('goalieInNetId', None)
             if play['details'].get('typeDescKey', None) == 'missed-shot':
                 shift['shot_attempt'] = data['details'].get('shootingPlayerId', None)
+            if play['details'].get('typeDescKey', None) == 'giveaway':
+                shift['giveaway'] = data['details'].get('PlayerId', None)
             if play['details'].get('typeDescKey', None) == 'delayed-penalty':
                 shift['delayed_penalty'] = data['details'].get('eventOwnerTeamId', None)
             if play['details'].get('typeDescKey', None) == 'penalty':

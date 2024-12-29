@@ -126,6 +126,18 @@ class Config:
             'shift_name': 'hit',
             'sport_stat': True,
         }
+        shift_categ['GIVE'] = {
+            'shift_name': 'giveaway',
+            'sport_stat': True,
+        }
+        shift_categ['SHOT'] = {
+            'shift_name': 'shot',
+            'sport_stat': True,
+        }
+        shift_categ['MISS'] = {
+            'shift_name': 'miss',
+            'sport_stat': True,
+        }
         return shift_categ
 
     @staticmethod
@@ -137,6 +149,18 @@ class Config:
         }
         event_categ[503] = {
             'event_name': 'hit',
+            'sport_stat': True,
+        }
+        event_categ[504] = {
+            'event_name': 'giveaway',
+            'sport_stat': True,
+        }
+        event_categ[506] = {
+            'event_name': 'shot',
+            'sport_stat': True,
+        }
+        event_categ[507] = {
+            'event_name': 'miss',
             'sport_stat': True,
         }
         event_categ[520] = {

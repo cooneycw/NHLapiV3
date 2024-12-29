@@ -64,6 +64,12 @@ def curate_data(config):
                     player_stats = process_faceoff(event, compare_shift, away_players, home_players)
                 elif event_details['event_name'] == 'hit':
                     player_stats = process_hit(event, compare_shift, away_players, home_players, last_event, game_time_event)
+                elif event_details['event_name'] == 'shot':
+                    player_stats = process_shot(event, compare_shift, away_players, home_players, last_event, game_time_event)
+                elif event_details['event_name'] == 'giveaway':
+                    player_stats = process_giveaway(event, compare_shift, away_players, home_players, last_event, game_time_event)
+                elif event_details['event_name'] == 'miss':
+                    player_stats = process_shot(event, compare_shift, away_players, home_players, last_event, game_time_event)
                 else:
                     cwc = 0
 
@@ -159,6 +165,87 @@ def process_hit(event, compare_shift, away_players, home_players, last_event, ga
         away_player_stats = create_player_stats(player_id)
         away_player_stats['toi'] += toi
         if event['hitting_player'] == player_id['player_id']:
+            away_player_stats['hit_another_player'] += 1
+        if event['hittee_player'] == player_id['player_id']:
+            away_player_stats['hit_by_player'] += 1
+        player_stats.append(away_player_stats)
+
+    for home_player in compare_shift['home_players']:
+        player_id = home_players[int(home_player[0])]
+        home_player_stats = create_player_stats(player_id)
+        home_player_stats['toi'] += toi
+        if event['hitting_player'] == player_id['player_id']:
+            home_player_stats['hit_another_player'] += 1
+        if event['hittee_player'] == player_id['player_id']:
+            home_player_stats['hit_by_player'] += 1
+        player_stats.append(home_player_stats)
+
+    return player_stats
+
+
+def process_shot(event, compare_shift, away_players, home_players, last_event, game_time_event):
+    player_stats = []
+    toi = calc_toi(game_time_event, last_event)
+
+    for away_player in compare_shift['away_players']:
+        player_id = away_players[int(away_player[0])]
+        away_player_stats = create_player_stats(player_id)
+        away_player_stats['toi'] += toi
+        if event['shooting'] == player_id['player_id']:
+            away_player_stats['hit_another_player'] += 1
+        if event['hittee_player'] == player_id['player_id']:
+            away_player_stats['hit_by_player'] += 1
+        player_stats.append(away_player_stats)
+
+    for home_player in compare_shift['home_players']:
+        player_id = home_players[int(home_player[0])]
+        home_player_stats = create_player_stats(player_id)
+        home_player_stats['toi'] += toi
+        if event['hitting_player'] == player_id['player_id']:
+            home_player_stats['hit_another_player'] += 1
+        if event['hittee_player'] == player_id['player_id']:
+            home_player_stats['hit_by_player'] += 1
+        player_stats.append(home_player_stats)
+
+    return player_stats
+
+
+def process_giveaway(event, compare_shift, away_players, home_players, last_event, game_time_event):
+    player_stats = []
+    toi = calc_toi(game_time_event, last_event)
+
+    for away_player in compare_shift['away_players']:
+        player_id = away_players[int(away_player[0])]
+        away_player_stats = create_player_stats(player_id)
+        away_player_stats['toi'] += toi
+        if event['shooting'] == player_id['player_id']:
+            away_player_stats['hit_another_player'] += 1
+        if event['hittee_player'] == player_id['player_id']:
+            away_player_stats['hit_by_player'] += 1
+        player_stats.append(away_player_stats)
+
+    for home_player in compare_shift['home_players']:
+        player_id = home_players[int(home_player[0])]
+        home_player_stats = create_player_stats(player_id)
+        home_player_stats['toi'] += toi
+        if event['hitting_player'] == player_id['player_id']:
+            home_player_stats['hit_another_player'] += 1
+        if event['hittee_player'] == player_id['player_id']:
+            home_player_stats['hit_by_player'] += 1
+        player_stats.append(home_player_stats)
+
+    return player_stats
+
+
+def process_miss(event, compare_shift, away_players, home_players, last_event, game_time_event):
+    player_stats = []
+    toi = calc_toi(game_time_event, last_event)
+
+    for away_player in compare_shift['away_players']:
+        player_id = away_players[int(away_player[0])]
+        away_player_stats = create_player_stats(player_id)
+        away_player_stats['toi'] += toi
+        if event['shooting'] == player_id['player_id']:
             away_player_stats['hit_another_player'] += 1
         if event['hittee_player'] == player_id['player_id']:
             away_player_stats['hit_by_player'] += 1

@@ -16,7 +16,7 @@ def main():
         "reload_rosters": True,
     }
     config = Config(config_dict)
-    # get_data(config)
+    get_data(config)
     curate_data(config)
 
 
