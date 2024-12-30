@@ -12,7 +12,8 @@ from datetime import datetime
 class Config:
     def __init__(self, input_dict):
         self.verbose = input_dict['verbose']
-        self.curr_date = datetime.now()
+        # self.curr_date = datetime.now().date()
+        self.curr_date = datetime(2024, 10, 5).date()
         self.base_url = "https://api-web.nhle.com"
         self.base_url_lines = "https://www.dailyfaceoff.com"
         self.headers_lines = {
@@ -43,7 +44,6 @@ class Config:
             "all_game_rosters": os.path.join(self.current_path, "storage", "pickles", "all_game_rosters.pkl"),
         }
 
-        self.curr_date = datetime.now().date()
         self.days_list = input_dict.get("days_list", None)
         self.seg_games = input_dict.get("seg_games", None)
         self.season_count = input_dict.get("season_count", None)
@@ -130,12 +130,28 @@ class Config:
             'shift_name': 'giveaway',
             'sport_stat': True,
         }
+        shift_categ['GOAL'] = {
+            'shift_name': 'goal',
+            'sport_stat': True,
+        }
         shift_categ['SHOT'] = {
-            'shift_name': 'shot',
+            'shift_name': 'shot-on-goal',
             'sport_stat': True,
         }
         shift_categ['MISS'] = {
-            'shift_name': 'miss',
+            'shift_name': 'missed-shot',
+            'sport_stat': True,
+        }
+        shift_categ['BLOCK'] = {
+            'shift_name': 'blocked-shot',
+            'sport_stat': True,
+        }
+        shift_categ['PENL'] = {
+            'shift_name': 'penalty',
+            'sport_stat': True,
+        }
+        shift_categ['STOP'] = {
+            'shift_name': 'stoppage',
             'sport_stat': True,
         }
         return shift_categ
@@ -155,17 +171,33 @@ class Config:
             'event_name': 'giveaway',
             'sport_stat': True,
         }
+        event_categ[505] = {
+            'event_name': 'goal',
+            'sport_stat': True,
+        }
         event_categ[506] = {
-            'event_name': 'shot',
+            'event_name': 'shot-on-goal',
             'sport_stat': True,
         }
         event_categ[507] = {
-            'event_name': 'miss',
+            'event_name': 'missed-shot',
+            'sport_stat': True,
+        }
+        event_categ[508] = {
+            'event_name': 'blocked-shot',
+            'sport_stat': True,
+        }
+        event_categ[509] = {
+            'event_name': 'penalty',
+            'sport_stat': True,
+        }
+        event_categ[516] = {
+            'event_name': 'stoppage',
             'sport_stat': True,
         }
         event_categ[520] = {
             'event_name': 'game-start',
             'sport_stat': False,
         }
-        return event_categ
 
+        return event_categ

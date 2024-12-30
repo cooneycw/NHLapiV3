@@ -103,7 +103,7 @@ def get_boxscore_list(config):
     dimension_players = "all_players"
     prior_data_games = config.load_data(dimension_games)
     prior_data_players = config.load_data(dimension_players)
-    config_curr_datetime = datetime.combine(config.curr_date, datetime.min.time())
+
     if prior_data_games and prior_data_players and config.reload_boxscores is False:
         for game_results in prior_data_games:
             game_obj = config.Game.get_game(game_results['id'])
@@ -118,39 +118,41 @@ def get_boxscore_list(config):
         save_game_results = []
         save_player_results = []
         for game in config.Game.get_games():
-            if game[1] < config_curr_datetime:
-                print(f'Getting boxscore for {game[0]}:{game[1]}:{game[2]}:{game[3]}')
-                final_url_v1 = config.get_endpoint("boxscore_v1", game_id=game[0])
-                response_v1 = requests.get(final_url_v1)
-                response_v1.raise_for_status()  # Ensure the response is OK
-                data_v1 = response_v1.json()
+            if game[1].date() >= config.curr_date:
+                continue
 
-                final_url_v2 = config.get_endpoint("boxscore_v2", game_id=game[0])
-                response_v2 = requests.get(final_url_v2)
-                response_v2.raise_for_status()  # Ensure the response is OK
-                data_v2 = response_v2.json()
+            print(f'Getting boxscore for {game[0]}:{game[1]}:{game[2]}:{game[3]}')
+            final_url_v1 = config.get_endpoint("boxscore_v1", game_id=game[0])
+            response_v1 = requests.get(final_url_v1)
+            response_v1.raise_for_status()  # Ensure the response is OK
+            data_v1 = response_v1.json()
 
-                game_obj = config.Game.get_game(game[0])
-                success, game_results = process_boxscore(game_obj.game_id, data_v1, data_v2)
-                if success:
-                    save_game_results.append(game_results)
-                    game_obj.update_game(game_results)
-                    for i, team in enumerate(['awayTeam', 'homeTeam']):
-                        position_data = data_v1['playerByGameStats'][team]
-                        for position in ['forwards', 'defense', 'goalies']:
-                            player_data = position_data[position]
-                            for player in player_data:
-                                if position != 'goalies':
-                                    player_results = process_forward_defense_data(player)
-                                else:
-                                    player_results = process_goalie_data(player)
-                                player_results['i'] = i
-                                player_results['game'] = game
-                                player_obj = config.Player.create_player(player_results['player_id'])
-                                player_obj.update_player(game[0], game[1], game[3 - i], game[4], player_results)
-                                save_player_results.append(player_results)
-                else:
-                    cwc = 0
+            final_url_v2 = config.get_endpoint("boxscore_v2", game_id=game[0])
+            response_v2 = requests.get(final_url_v2)
+            response_v2.raise_for_status()  # Ensure the response is OK
+            data_v2 = response_v2.json()
+
+            game_obj = config.Game.get_game(game[0])
+            success, game_results = process_boxscore(game_obj.game_id, data_v1, data_v2)
+            if success:
+                save_game_results.append(game_results)
+                game_obj.update_game(game_results)
+                for i, team in enumerate(['awayTeam', 'homeTeam']):
+                    position_data = data_v1['playerByGameStats'][team]
+                    for position in ['forwards', 'defense', 'goalies']:
+                        player_data = position_data[position]
+                        for player in player_data:
+                            if position != 'goalies':
+                                player_results = process_forward_defense_data(player)
+                            else:
+                                player_results = process_goalie_data(player)
+                            player_results['i'] = i
+                            player_results['game'] = game
+                            player_obj = config.Player.create_player(player_results['player_id'])
+                            player_obj.update_player(game[0], game[1], game[3 - i], game[4], player_results)
+                            save_player_results.append(player_results)
+            else:
+                cwc = 0
         # Set the games in the config, assuming this modifies some shared state or configuration
         config.save_data(dimension_games, save_game_results)
         config.save_data(dimension_players, save_player_results)
@@ -387,33 +389,60 @@ def process_plays(data):
         shift['game_time'] = play['timeRemaining']
         shift['event_type'] = play['typeDescKey']
         shift['event_code'] = play['typeCode']
-        if play.get('details') is not None:
+        shift['faceoff_winner'] = None
+        shift['faceoff_loser'] = None
+        shift['hitting_player'] = None
+        shift['hittee_player'] = None
+        shift['giveaway'] = None
+        shift['shot_attempt'] = None
+        shift['shot_on_goal'] = None
+        shift['shot_saved'] = None
+        shift['missed_shot_attempt'] = None
+        shift['blocked_shot_attempt'] = None
+        shift['blocked_shot_saved'] = None
+        shift['icing'] = None
+        shift['penalty_committed'] = None
+        shift['penalty_drawn'] = None
+        shift['penalty_duration'] = None
+        if play.get('typeCode') == 502:
             shift['faceoff_winner'] = play['details'].get('winningPlayerId', None)
             shift['faceoff_loser'] = play['details'].get('losingPlayerId', None)
+        elif play.get('typeCode') == 503:
             shift['hitting_player'] = play['details'].get('hittingPlayerId', None)
             shift['hittee_player'] = play['details'].get('hitteePlayerId', None)
-            shift['goal_scorer'] = play['details'].get('scoringPlayerId', None)
+        elif play.get('typeCode') == 504:
+            shift['giveaway'] = play['details'].get('playerId', None)
+        elif play.get('typeCode') == 505:
+            shift['goal'] = play['details'].get('playerId', None)
+            shift['shot_attempt'] = play['details'].get('scoringPlayerId', None)
+            shift['shot_on_goal'] = play['details'].get('scoringPlayerId', None)
             shift['goal_assist1'] = play['details'].get('assist1PlayerId', None)
             shift['goal_assist2'] = play['details'].get('assist2PlayerId', None)
             shift['goal_against'] = play['details'].get('goalieInNetId', None)
-            shift['shot_attempt'] = None
-            shift['delayed_penalty'] = None
-            shift['penalized_player'] = None
-            shift['penalized_infraction'] = None
-            if play['details'].get('typeDescKey', None) == 'shot-on-goal':
-                shift['shot_attempt'] = data['details'].get('shootingPlayerId', None)
-                shift['saving_goalie'] = data['details'].get('goalieInNetId', None)
-            if play['details'].get('typeDescKey', None) == 'missed-shot':
-                shift['shot_attempt'] = data['details'].get('shootingPlayerId', None)
-            if play['details'].get('typeDescKey', None) == 'giveaway':
-                shift['giveaway'] = data['details'].get('PlayerId', None)
-            if play['details'].get('typeDescKey', None) == 'delayed-penalty':
-                shift['delayed_penalty'] = data['details'].get('eventOwnerTeamId', None)
-            if play['details'].get('typeDescKey', None) == 'penalty':
-                shift['penalized_player'] = data['details'].get('committedByPlayerId', None)
-                shift['penalized_infraction'] = data['details'].get('descKey', None)
+        elif play.get('typeCode') == 506:
+            shift['shot_attempt'] = play['details'].get('shootingPlayerId', None)
+            shift['shot_on_goal'] = play['details'].get('shootingPlayerId', None)
+            shift['shot_saved'] = play['details'].get('goalieInNetId', None)
+        elif play.get('typeCode') == 507:
+            shift['missed_shot_attempt'] = play['details'].get('shootingPlayerId', None)
+        elif play.get('typeCode') == 508:
+            shift['blocked_shot_attempt'] = play['details'].get('shootingPlayerId', None)
+            shift['blocked_shot_saved'] = play['details'].get('blockingPlayerId', None)
+        elif play.get('typeCode') == 509:
+            shift['penalty_committed'] = play['details'].get('committedByPlayerId', None)
+            shift['penalty_drawn'] = play['details'].get('drawnByPlayerId', None)
+            shift['penalty_duration'] = play['details'].get('duration', None)
+        elif play.get('typeCode') == 510:
+            cwc = 0
+        elif play.get('typeCode') == 516:
+            shift['icing'] = play['details'].get('reason', None)
+        elif play.get('typeCode') in [520]: # period-start
+            pass
+        else:
+                cwc = 0
 
         plays.append(shift)
+
     return plays
 
 
