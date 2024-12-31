@@ -19,10 +19,10 @@ def curate_data(config):
 
     player_list, player_dict = create_player_dict(data_names)
 
-    i_shift = 0
     event_categ = config.event_categ
     shift_categ = config.shift_categ
     for i_game, game in enumerate(data_plays):
+        i_shift = 0
         game_id = []
         game_date = []
         away_teams = []
@@ -60,7 +60,7 @@ def curate_data(config):
                     i_shift += 1
                     continue
                 break
-            print(f'i_event: {i_event}  i_shift: {i_shift}')
+            # print(f'i_event: {i_event}  i_shift: {i_shift}')
             game_time_shift = period_time_to_game_time(event['period'], event['game_time'])
             del_penalty = False
             if (event_details['event_name'] == shift_details['shift_name']) and (game_time_event == game_time_shift):
@@ -183,9 +183,37 @@ def curate_data(config):
         # Step 2: Concatenate df and the modified new_columns_df along the columns
         df = pd.concat([df, new_columns_df], axis=1)
 
+        attributes_to_sum = ['goal', 'assist', 'shot_on_goal', 'goal_against']  # Example attributes
+
+        # Initialize columns for summed attributes
+
+        away_columns = {attr: [] for attr in attributes_to_sum}
+        home_columns = {attr: [] for attr in attributes_to_sum}
+
+        # Populate the column lists
+        for attr in attributes_to_sum:
+            # Away players: player_1_attr to player_20_attr
+            away_columns[attr] = [f'player_{i}_{attr}' for i in range(1, len(away_players) + 1)]
+
+            # Home players: player_21_attr to player_40_attr
+            home_columns[attr] = [f'player_{i}_{attr}' for i in range(len(away_players) + 1, 2 * len(away_players) + 1)]
+
+        team_sums = {'away': {}, 'home': {}}
+
+        # Calculate sums for each attribute
+        for attr in attributes_to_sum:
+            # Sum for away team
+            team_sums['away'][f'away_{attr}_sum'] = sum(list(df[away_columns[attr]].sum()))
+
+            # Sum for home team
+            team_sums['home'][f'home_{attr}_sum'] = sum(list(df[home_columns[attr]].sum()))
+
+        print(f'toi: {df["time_on_ice"].sum()}')
+        print(f'team sums from shift data: {team_sums}')
+        print(f'boxscore data: away_goals {data_games[i_game]["away_goals"]} away_sog {data_games[i_game]["away_sog"]}  home_goals {data_games[i_game]["home_goals"]} home_sog {data_games[i_game]["home_sog"]}')
         # Step 4: Export the DataFrame to CSV
         df.to_csv(config.file_paths['game_output'] + f'{str(game_id[0])}.csv', na_rep='', index=False)
-        cwc = 0
+
     # config = load_data()
     # curate_basic_stats(config, curr_date)
     # curate_future_games(config, curr_date)
