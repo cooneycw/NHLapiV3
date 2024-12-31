@@ -42,7 +42,7 @@ class Config:
             "all_shifts": os.path.join(self.current_path, "storage", "pickles", "all_shifts.pkl"),
             "all_plays": os.path.join(self.current_path, "storage", "pickles", "all_plays.pkl"),
             "all_game_rosters": os.path.join(self.current_path, "storage", "pickles", "all_game_rosters.pkl"),
-            "test_output": os.path.join(self.current_path, "storage", "output", "test_output.csv"),
+            "game_output": os.path.join(self.current_path, "storage", "output", "game_output"),
         }
 
         self.days_list = input_dict.get("days_list", None)

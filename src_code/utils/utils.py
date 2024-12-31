@@ -111,6 +111,35 @@ def create_roster_dicts(data_game_roster, away_team, home_team):
 
     return away_players, home_players
 
+
+def create_ordered_roster(data_game_roster, away_team, home_team):
+    away_players = {}
+    home_players = {}
+
+    for player in data_game_roster:
+        player_id = player['player_id']
+        player_team = player['player_team']
+        player_lname = player['player_last_name']['default']
+        player_fname = player['player_first_name']['default']
+        player_sweater = player['player_sweater']
+        player_position = player['player_position']
+
+        player_dat = {
+            'player_id': player_id,
+            'player_team': player_team,
+            'player_lname': player_lname,
+            'player_fname': player_fname,
+            'player_sweater': player_sweater,
+            'player_position': player_position,
+        }
+        if player['player_team'] == away_team:
+            away_players[player_id] = player_dat
+        else:
+            home_players[player_id] = player_dat
+
+    return away_players, home_players
+
+
 def create_player_dict(data_names):
     player_list = []
     dict_of_players = {}
@@ -154,7 +183,3 @@ def create_player_stats(player_id):
         'goal_against': 0,
     }
     return player_stats
-
-def decompose_lines():
-    cwc = 0
-    pass

@@ -1,4 +1,4 @@
-from src_code.utils.utils import period_time_to_game_time, game_time_to_period_time, create_player_dict, decompose_lines, create_roster_dicts, create_player_stats
+from src_code.utils.utils import period_time_to_game_time, game_time_to_period_time, create_player_dict, create_roster_dicts, create_ordered_roster, create_player_stats
 import copy
 import pandas as pd
 
@@ -17,29 +17,31 @@ def curate_data(config):
     data_plays = config.load_data(dimension_plays)
     data_game_roster = config.load_data(dimension_game_rosters)
 
-    game_id = []
-    game_date = []
-    teams = []
-    period_id = []
-    time_index = []
-    toi_list = []
-    event_id = []
-    shift_id = []
-    away_empty_net = []
-    home_empty_net = []
-    away_skaters = []
-    home_skaters = []
-    player_data = []
-
     player_list, player_dict = create_player_dict(data_names)
 
     i_shift = 0
     event_categ = config.event_categ
     shift_categ = config.shift_categ
     for i_game, game in enumerate(data_plays):
+        game_id = []
+        game_date = []
+        away_teams = []
+        home_teams = []
+        period_id = []
+        time_index = []
+        toi_list = []
+        event_id = []
+        shift_id = []
+        away_empty_net = []
+        home_empty_net = []
+        away_skaters = []
+        home_skaters = []
+        player_data = []
+
         away_team = data_games[i_game]['awayTeam']
         home_team = data_games[i_game]['homeTeam']
         away_players, home_players = create_roster_dicts(data_game_roster[i_game], away_team, home_team)
+        away_players_sorted, home_players_sorted = create_ordered_roster(data_game_roster[i_game], away_team, home_team)
         last_event = None
 
         for i_event, event in enumerate(game):
@@ -92,7 +94,8 @@ def curate_data(config):
 
                 game_id.append(game[i_event]['game_id'])
                 game_date.append(data_games[i_game]['game_date'])
-                teams.append((away_team, home_team))
+                away_teams.append(away_team)
+                home_teams.append(home_team)
                 period_id.append(event['period'])
                 time_index.append(event['game_time'])
                 toi_list.append(toi)
@@ -106,28 +109,83 @@ def curate_data(config):
                 last_event = copy.deepcopy(event)
 
                 i_shift += 1
-    cwc = 0
-    data = {
-        'game_id': game_id,
-        'game_date': game_date,
-        'teams': teams,
-        'period_id': period_id,
-        'time_index': time_index,
-        'time_on_ice': toi_list,
-        'event_id': event_id,
-        'shift_id': shift_id,
-        'away_empty_net': away_empty_net,
-        'home_empty_net': home_empty_net,
-        'away_skaters': away_skaters,
-        'home_skaters': home_skaters
-    }
 
-    # Step 4: Convert the dictionary to a pandas DataFrame
-    df = pd.DataFrame(data)
+        data = {
+            'game_id': game_id,
+            'game_date': game_date,
+            'away_teams': away_teams,
+            'home_teams': home_teams,
+            'period_id': period_id,
+            'time_index': time_index,
+            'time_on_ice': toi_list,
+            'event_id': event_id,
+            'shift_id': shift_id,
+            'away_empty_net': away_empty_net,
+            'home_empty_net': home_empty_net,
+            'away_skaters': away_skaters,
+            'home_skaters': home_skaters
+        }
 
-    # Step 4: Export the DataFrame to CSV
-    df.to_csv(config.file_paths['test_output'], index=False)
+        # Step 4: Convert the dictionary to a pandas DataFrame
+        df = pd.DataFrame(data)
 
+        player_attributes = list(player_data[0][0].keys())
+
+        standardized_players = []
+
+        # Sort away players by sweater number
+        for player_id in sorted(away_players.keys()):
+            standardized_players.append(away_players[player_id])
+
+        # Sort home players by sweater number
+        for player_id in sorted(home_players.keys()):
+            standardized_players.append(home_players[player_id])
+
+        num_players = len(standardized_players)
+        # Initialize new columns with NaN for each player and attribute
+        new_columns = {'player_data': player_data}
+
+        # Generate dynamic key-value pairs and update the dictionary
+        new_columns.update({
+            f'player_{i}_{attr}': pd.NA
+            for i in range(1, num_players + 1)
+            for attr in player_attributes
+        })
+
+        # Add all new columns at once using .assign()
+        new_columns_df = pd.DataFrame(new_columns, index=df.index)
+
+        player_id_to_position = {}
+        for idx, player in enumerate(standardized_players, start=1):
+            player_id = player['player_id']
+            player_id_to_position[player_id] = idx
+
+        def populate_player_columns(row):
+            # Assume 'player_list' is the column in df that contains the list of player dicts
+            player_data_row = row['player_data']  # Adjust the column name as needed
+
+            for player_in_row in player_data_row:
+                player_id_for_player_in_row = player_in_row['player_id']
+                if player_id_for_player_in_row in player_id_to_position:
+                    pos = player_id_to_position[player_id_for_player_in_row]
+                    for attr in player_attributes:
+                        col_name = f'player_{pos}_{attr}'
+                        row[col_name] = player_in_row.get(attr, pd.NA)
+                else:
+                    # Handle players not in the standardized list if necessary
+                    pass
+            return row
+
+        new_columns_df = new_columns_df.apply(populate_player_columns, axis=1)
+
+        new_columns_df = new_columns_df.drop(columns=['player_data'])
+
+        # Step 2: Concatenate df and the modified new_columns_df along the columns
+        df = pd.concat([df, new_columns_df], axis=1)
+
+        # Step 4: Export the DataFrame to CSV
+        df.to_csv(config.file_paths['game_output'] + f'{str(game_id[0])}.csv', na_rep='', index=False)
+        cwc = 0
     # config = load_data()
     # curate_basic_stats(config, curr_date)
     # curate_future_games(config, curr_date)
@@ -145,6 +203,9 @@ def curate_data(config):
     #     print(f"Player processing days: {days}")
     #     curate_rolling_player_stats(config, curr_date, first_days, days=days)
     #     curate_proj_player_data(config, curr_date, first_days, days=days)
+
+
+
 
 def process_empty_net(compare_shift):
     ret_dict = {}
