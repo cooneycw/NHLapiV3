@@ -394,8 +394,13 @@ def process_plays(data):
         shift['hitting_player'] = None
         shift['hittee_player'] = None
         shift['giveaway'] = None
+        shift['takeaway'] = None
+        shift['goal'] = None
         shift['shot_attempt'] = None
         shift['shot_on_goal'] = None
+        shift['goal_assist1'] = None
+        shift['goal_assist2'] = None
+        shift['goal_against'] = None
         shift['shot_saved'] = None
         shift['missed_shot_attempt'] = None
         shift['blocked_shot_attempt'] = None
@@ -404,6 +409,9 @@ def process_plays(data):
         shift['penalty_committed'] = None
         shift['penalty_drawn'] = None
         shift['penalty_duration'] = None
+        shift['delayed_penalty'] = None
+        shift['period_end'] = None
+        shift['game_end'] = None
         if play.get('typeCode') == 502:
             shift['faceoff_winner'] = play['details'].get('winningPlayerId', None)
             shift['faceoff_loser'] = play['details'].get('losingPlayerId', None)
@@ -413,7 +421,7 @@ def process_plays(data):
         elif play.get('typeCode') == 504:
             shift['giveaway'] = play['details'].get('playerId', None)
         elif play.get('typeCode') == 505:
-            shift['goal'] = play['details'].get('playerId', None)
+            shift['goal'] = play['details'].get('scoringPlayerId', None)
             shift['shot_attempt'] = play['details'].get('scoringPlayerId', None)
             shift['shot_on_goal'] = play['details'].get('scoringPlayerId', None)
             shift['goal_assist1'] = play['details'].get('assist1PlayerId', None)
@@ -435,9 +443,15 @@ def process_plays(data):
         elif play.get('typeCode') == 510:
             cwc = 0
         elif play.get('typeCode') == 516:
-            shift['icing'] = play['details'].get('reason', None)
-        elif play.get('typeCode') in [520]: # period-start
+            shift['stoppage'] = play['details'].get('reason', None)
+        elif play.get('typeCode') in [520, 524]:  # period-start / game-end
             pass
+        elif play.get('typeCode') == 521: # period-end
+            shift['period_end'] = True
+        elif play.get('typeCode') == 525:
+            shift['takeaway'] = play['details'].get('playerId', None)
+        elif play.get('typeCode') == 535: # delayed-penalty
+            shift['delayed_penalty'] = 1
         else:
                 cwc = 0
 

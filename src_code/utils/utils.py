@@ -141,6 +141,7 @@ def create_player_stats(player_id):
         'hit_by_player': 0,
         'icing': 0,
         'giveaways': 0,
+        'takeaways': 0,
         'shot_attempt': 0,
         'shot_missed': 0,
         'shot_on_goal': 0,
@@ -149,6 +150,8 @@ def create_player_stats(player_id):
         'faceoff_taken': 0,
         'faceoff_won': 0,
         'goal': 0,
+        'assist': 0,
+        'goal_against': 0,
     }
     return player_stats
 

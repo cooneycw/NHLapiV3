@@ -42,6 +42,7 @@ class Config:
             "all_shifts": os.path.join(self.current_path, "storage", "pickles", "all_shifts.pkl"),
             "all_plays": os.path.join(self.current_path, "storage", "pickles", "all_plays.pkl"),
             "all_game_rosters": os.path.join(self.current_path, "storage", "pickles", "all_game_rosters.pkl"),
+            "test_output": os.path.join(self.current_path, "storage", "output", "test_output.csv"),
         }
 
         self.days_list = input_dict.get("days_list", None)
@@ -154,6 +155,26 @@ class Config:
             'shift_name': 'stoppage',
             'sport_stat': True,
         }
+        shift_categ['PEND'] = {
+            'shift_name': 'period-end',
+            'sport_stat': True,
+        }
+        shift_categ['TAKE'] = {
+            'shift_name': 'giveaway',
+            'sport_stat': True,
+        }
+        shift_categ['SPC'] = {
+            'shift_name': 'unknown',
+            'sport_stat': False,
+        }
+        shift_categ['GEND'] = {
+            'shift_name': 'game-end',
+            'sport_stat': False,
+        }
+        shift_categ['DELPEN'] = {
+            'shift_name': 'delayed-penalty',
+            'sport_stat': True,
+        }
         return shift_categ
 
     @staticmethod
@@ -191,6 +212,10 @@ class Config:
             'event_name': 'penalty',
             'sport_stat': True,
         }
+        event_categ[510] = {
+            'event_name': '',
+            'sport_stat': True,
+        }
         event_categ[516] = {
             'event_name': 'stoppage',
             'sport_stat': True,
@@ -198,6 +223,22 @@ class Config:
         event_categ[520] = {
             'event_name': 'game-start',
             'sport_stat': False,
+        }
+        event_categ[521] = {
+            'event_name': 'period-end',
+            'sport_stat': True,
+        }
+        event_categ[524] = {
+            'event_name': 'game-end',
+            'sport_stat': False,
+        }
+        event_categ[525] = {
+            'event_name': 'giveaway',
+            'sport_stat': True,
+        }
+        event_categ[535] = {
+            'event_name': 'delayed-penalty',
+            'sport_stat': True,
         }
 
         return event_categ
