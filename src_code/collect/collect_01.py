@@ -446,12 +446,24 @@ def process_plays(data):
             cwc = 0
         elif play.get('typeCode') == 516:
             shift['stoppage'] = play['details'].get('reason', None)
+            if shift['stoppage'] not in ['icing', 'goalie-stopped-after-sog', 'puck-in-crowd', 'puck-in-netting',
+                                 'offside', 'puck-in-crowd', 'puck-in-benches', 'puck-frozen', 'tv-timeout',
+                                 'high-stick', 'net-dislodged-defensive-skater', 'player-injury', 'video-review',
+                                 'referee-or-linesman',
+                                 'hand-pass', 'objects-on-ice', 'goalie-puck-frozen-played-from-beyond-center',
+                                 'visitor-timeout', 'net-dislodged-offensive-skater', 'chlg-hm-goal-interference',
+                                 'chlg-vis-goal-interference', 'chlg-hm-missed-stoppage', 'skater-puck-frozen',
+                                 'player-equipment', 'chlg-hm-off-side', 'chlg-vis-off-side',
+                                 'chlg-hm-missed-stoppage', 'home-timeout']:
+                print(f'play stoppage reason: {play["details"]["reason"]}')
         elif play.get('typeCode') in [520, 524]:  # period-start / game-end
             if play['typeCode'] == 520 and play['periodDescriptor']['periodType'] == 'OT':
                 shift['overtime'] = True
             if play['typeCode'] == 520 and play['periodDescriptor']['periodType'] == 'SO':
                 shift['shootout'] = True
         elif play.get('typeCode') == 521: # period-end
+            shift['period_end'] = True
+        elif play.get('typeCode') == 523: # period-end
             shift['period_end'] = True
         elif play.get('typeCode') == 525:
             shift['takeaway'] = play['details'].get('playerId', None)

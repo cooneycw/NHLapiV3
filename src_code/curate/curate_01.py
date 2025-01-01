@@ -183,7 +183,7 @@ def curate_data(config):
         # Step 2: Concatenate df and the modified new_columns_df along the columns
         df = pd.concat([df, new_columns_df], axis=1)
 
-        attributes_to_sum = ['goal', 'assist', 'shot_on_goal', 'goal_against']  # Example attributes
+        attributes_to_sum = ['goal', 'assist', 'shot_on_goal', 'goal_against', 'goal_overtime', 'goal_shootout', 'penalties_duration']  # Example attributes
 
         # Initialize columns for summed attributes
 
@@ -203,10 +203,14 @@ def curate_data(config):
         # Calculate sums for each attribute
         for attr in attributes_to_sum:
             # Sum for away team
-            team_sums['away'][f'away_{attr}_sum'] = sum(list(df[away_columns[attr]].sum()))
+            sum_series = df[away_columns[attr]].sum().to_list()
+            sum_list = [int(x) for x in sum_series]
+            team_sums['away'][f'away_{attr}_sum'] = sum(sum_list)
 
             # Sum for home team
-            team_sums['home'][f'home_{attr}_sum'] = sum(list(df[home_columns[attr]].sum()))
+            sum_series = df[home_columns[attr]].sum().to_list()
+            sum_list = [int(x) for x in sum_series]
+            team_sums['home'][f'home_{attr}_sum'] = sum(sum_list)
 
         print(f'toi: {df["time_on_ice"].sum()}')
         print(f'shift data: {team_sums["away"]}  {team_sums["home"]}')
@@ -588,28 +592,36 @@ def process_stoppage(event, compare_shift, away_players, home_players, last_even
         player_id = away_players[int(away_player[0])]
         away_player_stats = create_player_stats(player_id)
         away_player_stats['toi'] += toi
-        if event['stoppage'] == 'icing':
-            away_player_stats[icing_code] += 1
-        elif event['stoppage'] in ['goalie-stopped-after-sog', 'puck-in-crowd']:
+        if event['stoppage'] in ['icing', 'goalie-stopped-after-sog', 'puck-in-crowd', 'puck-in-netting',
+                                 'offside', 'puck-in-crowd', 'puck-in-benches', 'puck-frozen', 'tv-timeout',
+                                 'high-stick', 'net-dislodged-defensive-skater', 'player-injury', 'video-review',
+                                 'referee-or-linesman',
+                                 'hand-pass', 'objects-on-ice', 'goalie-puck-frozen-played-from-beyond-center',
+                                 'visitor-timeout', 'net-dislodged-offensive-skater', 'chlg-hm-goal-interference',
+                                 'chlg-vis-goal-interference', 'chlg-hm-missed-stoppage', 'skater-puck-frozen',
+                                 'player-equipment', 'chlg-hm-off-side', 'chlg-vis-off-side',
+                                 'chlg-hm-missed-stoppage', 'home-timeout']:
             pass  # data lacks detail to specify which goalie / team
-        elif event['stoppage'] == 'offside':
-            away_player_stats[offside_code] += 1
         else:
-            cwc = 0
+            print(f'stoppage reason: {event["stoppage"]}')
         player_stats.append(away_player_stats)
 
     for home_player in compare_shift['home_players']:
         player_id = home_players[int(home_player[0])]
         home_player_stats = create_player_stats(player_id)
         home_player_stats['toi'] += toi
-        if event['stoppage'] == 'icing':
-            home_player_stats[icing_code] += 1
-        elif event['stoppage'] in ['goalie-stopped-after-sog', 'puck-in-crowd']:
+        if event['stoppage'] in ['icing', 'goalie-stopped-after-sog', 'puck-in-crowd', 'puck-in-netting',
+                                 'offside', 'puck-in-crowd', 'puck-in-benches', 'puck-frozen', 'tv-timeout',
+                                 'high-stick', 'net-dislodged-defensive-skater', 'player-injury', 'video-review',
+                                 'referee-or-linesman',
+                                 'hand-pass', 'objects-on-ice', 'goalie-puck-frozen-played-from-beyond-center',
+                                 'visitor-timeout', 'net-dislodged-offensive-skater', 'chlg-hm-goal-interference',
+                                 'chlg-vis-goal-interference', 'chlg-hm-missed-stoppage', 'skater-puck-frozen',
+                                 'player-equipment', 'chlg-hm-off-side', 'chlg-vis-off-side',
+                                 'chlg-hm-missed-stoppage', 'home-timeout']:
             pass  # data lacks detail to specify which goalie / team
-        elif event['stoppage'] == 'offside':
-            home_player_stats[offside_code] += 1
         else:
-             cwc = 0
+             print(f'stoppage reason: {event["stoppage"]}')
         player_stats.append(home_player_stats)
 
     return toi, player_stats
