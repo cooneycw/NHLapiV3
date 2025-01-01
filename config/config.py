@@ -12,7 +12,7 @@ from datetime import datetime
 class Config:
     def __init__(self, input_dict):
         self.verbose = input_dict['verbose']
-        # self.curr_date = datetime.now().date()
+        #  self.curr_date = datetime.now().date()
         self.curr_date = datetime(2024, 10, 7).date()
         self.base_url = "https://api-web.nhle.com"
         self.base_url_lines = "https://www.dailyfaceoff.com"
@@ -159,6 +159,10 @@ class Config:
             'shift_name': 'period-end',
             'sport_stat': True,
         }
+        shift_categ['SOC'] = {
+            'shift_name': 'shootout-complete',
+            'sport_stat': False,
+        }
         shift_categ['TAKE'] = {
             'shift_name': 'giveaway',
             'sport_stat': True,
@@ -228,6 +232,10 @@ class Config:
             'event_name': 'period-end',
             'sport_stat': True,
         }
+        event_categ[523] = {
+            'event_name': 'shootout-complete',
+            'sport_stat': False,
+        }
         event_categ[524] = {
             'event_name': 'game-end',
             'sport_stat': False,
@@ -240,5 +248,5 @@ class Config:
             'event_name': 'delayed-penalty',
             'sport_stat': True,
         }
-
         return event_categ
+

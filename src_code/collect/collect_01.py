@@ -412,6 +412,8 @@ def process_plays(data):
         shift['delayed_penalty'] = None
         shift['period_end'] = None
         shift['game_end'] = None
+        shift['overtime'] = False
+        shift['shootout'] = False
         if play.get('typeCode') == 502:
             shift['faceoff_winner'] = play['details'].get('winningPlayerId', None)
             shift['faceoff_loser'] = play['details'].get('losingPlayerId', None)
@@ -445,7 +447,10 @@ def process_plays(data):
         elif play.get('typeCode') == 516:
             shift['stoppage'] = play['details'].get('reason', None)
         elif play.get('typeCode') in [520, 524]:  # period-start / game-end
-            pass
+            if play['typeCode'] == 520 and play['periodDescriptor']['periodType'] == 'OT':
+                shift['overtime'] = True
+            if play['typeCode'] == 520 and play['periodDescriptor']['periodType'] == 'SO':
+                shift['shootout'] = True
         elif play.get('typeCode') == 521: # period-end
             shift['period_end'] = True
         elif play.get('typeCode') == 525:

@@ -209,7 +209,7 @@ def curate_data(config):
             team_sums['home'][f'home_{attr}_sum'] = sum(list(df[home_columns[attr]].sum()))
 
         print(f'toi: {df["time_on_ice"].sum()}')
-        print(f'team sums from shift data: {team_sums}')
+        print(f'shift data: {team_sums["away"]}  {team_sums["home"]}')
         print(f'boxscore data: away_goals {data_games[i_game]["away_goals"]} away_sog {data_games[i_game]["away_sog"]}  home_goals {data_games[i_game]["home_goals"]} home_sog {data_games[i_game]["home_sog"]}')
         # Step 4: Export the DataFrame to CSV
         df.to_csv(config.file_paths['game_output'] + f'{str(game_id[0])}.csv', na_rep='', index=False)
@@ -343,23 +343,33 @@ def process_giveaway(event, compare_shift, away_players, home_players, last_even
 def process_goal(event, compare_shift, away_players, home_players, last_event, game_time_event):
     player_stats = []
     toi = calc_toi(game_time_event, last_event)
+    period_code = 0
+    if event['overtime']:
+        period_code = 1
+    elif event['shootout']:
+        period_code = 2
+    shot_attempt_code = ['shot_attempt', 'shot_attempt_overtime', 'shot_attempt_shootout'][period_code]
+    shot_on_goal_code = ['shot_on_goal', 'shot_on_goal_overtime', 'shot_on_goal_shootout'][period_code]
+    goal_code = ['goal', 'goal_overtime', 'goal_shootout'][period_code]
+    assist_code = ['assist', 'assist_overtime', 'assist_shootout'][period_code]
+    goal_against_code = ['goal_against', 'goal_against_overtime', 'goal_against_shootout'][period_code]
 
     for away_player in compare_shift['away_players']:
         player_id = away_players[int(away_player[0])]
         away_player_stats = create_player_stats(player_id)
         away_player_stats['toi'] += toi
         if event['shot_attempt'] == player_id['player_id']:
-            away_player_stats['shot_attempt'] += 1
+            away_player_stats[shot_attempt_code] += 1
         if event['shot_on_goal'] == player_id['player_id']:
-            away_player_stats['shot_on_goal'] += 1
+            away_player_stats[shot_on_goal_code] += 1
         if event['goal'] == player_id['player_id']:
-            away_player_stats['goal'] += 1
+            away_player_stats[goal_code] += 1
         if event['goal_assist1'] == player_id['player_id']:
-            away_player_stats['assist'] += 1
+            away_player_stats[assist_code] += 1
         if event['goal_assist2'] == player_id['player_id']:
-            away_player_stats['assist'] += 1
+            away_player_stats[assist_code] += 1
         if event['goal_against'] == player_id['player_id']:
-            away_player_stats['goal_against'] += 1
+            away_player_stats[goal_against_code] += 1
 
         player_stats.append(away_player_stats)
 
@@ -368,17 +378,17 @@ def process_goal(event, compare_shift, away_players, home_players, last_event, g
         home_player_stats = create_player_stats(player_id)
         home_player_stats['toi'] += toi
         if event['shot_attempt'] == player_id['player_id']:
-            home_player_stats['shot_attempt'] += 1
+            home_player_stats[shot_attempt_code] += 1
         if event['shot_on_goal'] == player_id['player_id']:
-            home_player_stats['shot_on_goal'] += 1
+            home_player_stats[shot_on_goal_code] += 1
         if event['goal'] == player_id['player_id']:
-            home_player_stats['goal'] += 1
+            home_player_stats[goal_code] += 1
         if event['goal_assist1'] == player_id['player_id']:
-            home_player_stats['assist'] += 1
+            home_player_stats[assist_code] += 1
         if event['goal_assist2'] == player_id['player_id']:
-            home_player_stats['assist'] += 1
+            home_player_stats[assist_code] += 1
         if event['goal_against'] == player_id['player_id']:
-            home_player_stats['goal_against'] += 1
+            home_player_stats[goal_against_code] += 1
 
         player_stats.append(home_player_stats)
 
@@ -388,17 +398,25 @@ def process_goal(event, compare_shift, away_players, home_players, last_event, g
 def process_shot_on_goal(event, compare_shift, away_players, home_players, last_event, game_time_event):
     player_stats = []
     toi = calc_toi(game_time_event, last_event)
+    period_code = 0
+    if event['overtime']:
+        period_code = 1
+    elif event['shootout']:
+        period_code = 2
+    shot_attempt_code = ['shot_attempt', 'shot_attempt_overtime', 'shot_attempt_shootout'][period_code]
+    shot_on_goal_code = ['shot_on_goal', 'shot_on_goal_overtime', 'shot_on_goal_shootout'][period_code]
+    shot_saved_code = ['shot_saved', 'shot_saved_overtime', 'shot_saved_shootout'][period_code]
 
     for away_player in compare_shift['away_players']:
         player_id = away_players[int(away_player[0])]
         away_player_stats = create_player_stats(player_id)
         away_player_stats['toi'] += toi
         if event['shot_attempt'] == player_id['player_id']:
-            away_player_stats['shot_attempt'] += 1
+            away_player_stats[shot_attempt_code] += 1
         if event['shot_on_goal'] == player_id['player_id']:
-            away_player_stats['shot_on_goal'] += 1
+            away_player_stats[shot_on_goal_code] += 1
         if event['shot_saved'] == player_id['player_id']:
-            away_player_stats['shot_saved'] += 1
+            away_player_stats[shot_saved_code] += 1
         player_stats.append(away_player_stats)
 
     for home_player in compare_shift['home_players']:
@@ -406,11 +424,11 @@ def process_shot_on_goal(event, compare_shift, away_players, home_players, last_
         home_player_stats = create_player_stats(player_id)
         home_player_stats['toi'] += toi
         if event['shot_attempt'] == player_id['player_id']:
-            home_player_stats['shot_attempt'] += 1
+            home_player_stats[shot_attempt_code] += 1
         if event['shot_on_goal'] == player_id['player_id']:
-            home_player_stats['shot_on_goal'] += 1
+            home_player_stats[shot_on_goal_code] += 1
         if event['shot_saved'] == player_id['player_id']:
-            home_player_stats['shot_saved'] += 1
+            home_player_stats[shot_saved_code] += 1
         player_stats.append(home_player_stats)
 
     return toi, player_stats
@@ -419,13 +437,19 @@ def process_shot_on_goal(event, compare_shift, away_players, home_players, last_
 def process_missed_shot(event, compare_shift, away_players, home_players, last_event, game_time_event):
     player_stats = []
     toi = calc_toi(game_time_event, last_event)
+    period_code = 0
+    if event['overtime']:
+        period_code = 1
+    elif event['shootout']:
+        period_code = 2
+    shot_missed_code = ['shot_missed', 'shot_missed_overtime', 'shot_missed_shootout'][period_code]
 
     for away_player in compare_shift['away_players']:
         player_id = away_players[int(away_player[0])]
         away_player_stats = create_player_stats(player_id)
         away_player_stats['toi'] += toi
         if event['missed_shot_attempt'] == player_id['player_id']:
-            away_player_stats['shot_attempt'] += 1
+            away_player_stats[shot_missed_code] += 1
         player_stats.append(away_player_stats)
 
     for home_player in compare_shift['home_players']:
@@ -433,7 +457,7 @@ def process_missed_shot(event, compare_shift, away_players, home_players, last_e
         home_player_stats = create_player_stats(player_id)
         home_player_stats['toi'] += toi
         if event['missed_shot_attempt'] == player_id['player_id']:
-            home_player_stats['shot_attempt'] += 1
+            home_player_stats[shot_missed_code] += 1
         player_stats.append(home_player_stats)
 
     return toi, player_stats
@@ -442,15 +466,22 @@ def process_missed_shot(event, compare_shift, away_players, home_players, last_e
 def process_blocked_shot(event, compare_shift, away_players, home_players, last_event, game_time_event):
     player_stats = []
     toi = calc_toi(game_time_event, last_event)
+    period_code = 0
+    if event['overtime']:
+        period_code = 1
+    elif event['shootout']:
+        period_code = 2
+    shot_attempt_code = ['shot_attempt', 'shot_attempt_overtime', 'shot_attempt_shootout'][period_code]
+    shot_blocked_code = ['shot_blocked', 'shot_blocked_overtime', 'shot_blocked_shootout'][period_code]
 
     for away_player in compare_shift['away_players']:
         player_id = away_players[int(away_player[0])]
         away_player_stats = create_player_stats(player_id)
         away_player_stats['toi'] += toi
         if event['blocked_shot_attempt'] == player_id['player_id']:
-            away_player_stats['shot_attempt'] += 1
+            away_player_stats[shot_attempt_code] += 1
         if event['blocked_shot_saved'] == player_id['player_id']:
-            away_player_stats['shot_blocked'] += 1
+            away_player_stats[shot_blocked_code] += 1
         player_stats.append(away_player_stats)
 
     for home_player in compare_shift['home_players']:
@@ -458,9 +489,9 @@ def process_blocked_shot(event, compare_shift, away_players, home_players, last_
         home_player_stats = create_player_stats(player_id)
         home_player_stats['toi'] += toi
         if event['blocked_shot_attempt'] == player_id['player_id']:
-            home_player_stats['shot_attempt'] += 1
+            home_player_stats[shot_attempt_code] += 1
         if event['blocked_shot_saved'] == player_id['player_id']:
-            home_player_stats['shot_blocked'] += 1
+            home_player_stats[shot_blocked_code] += 1
         player_stats.append(home_player_stats)
 
     return toi, player_stats
@@ -469,25 +500,39 @@ def process_blocked_shot(event, compare_shift, away_players, home_players, last_
 def process_penalty(event, compare_shift, away_players, home_players, last_event, game_time_event):
     player_stats = []
     toi = calc_toi(game_time_event, last_event)
+    period_code = 0
+    if event['overtime']:
+        period_code = 1
+    elif event['shootout']:
+        period_code = 2
+    penalties_code = ['penalties', 'penalties_overtime', 'penalties_shootout'][period_code]
+    penalties_drawn_code = ['penalties_drawn', 'penalties_drawn_overtime', 'penalties_drawn_shootout'][period_code]
+    penalties_duration_code = ['penalties_duration', 'penalties_duration_overtime', 'penalties_duration_shootout'][period_code]
 
     for away_player in compare_shift['away_players']:
         player_id = away_players[int(away_player[0])]
         away_player_stats = create_player_stats(player_id)
         away_player_stats['toi'] += toi
-        if event['blocked_shot_attempt'] == player_id['player_id']:
-            away_player_stats['shot_attempt'] += 1
-        if event['blocked_shot_saved'] == player_id['player_id']:
-            away_player_stats['shot_blocked'] += 1
+        if event['penalty_committed'] == player_id['player_id']:
+            away_player_stats[penalties_code] += 1
+        if event['penalty_commited'] == player_id['player_id']:
+            away_player_stats[penalties_duration_code] += event['penalty_duration']
+        if event['penalty_drawn'] == player_id['player_id']:
+            away_player_stats[penalties_drawn_code] += 1
+
         player_stats.append(away_player_stats)
 
     for home_player in compare_shift['home_players']:
         player_id = home_players[int(home_player[0])]
         home_player_stats = create_player_stats(player_id)
         home_player_stats['toi'] += toi
-        if event['blocked_shot_attempt'] == player_id['player_id']:
-            home_player_stats['shot_attempt'] += 1
-        if event['blocked_shot_saved'] == player_id['player_id']:
-            home_player_stats['shot_blocked'] += 1
+        if event['penalty_committed'] == player_id['player_id']:
+            home_player_stats[penalties_code] += 1
+        if event['penalty_commited'] == player_id['player_id']:
+            home_player_stats[penalties_duration_code] += event['penalty_duration']
+        if event['penalty_drawn'] == player_id['player_id']:
+            home_player_stats[penalties_drawn_code] += 1
+
         player_stats.append(home_player_stats)
 
     return toi, player_stats
@@ -496,25 +541,32 @@ def process_penalty(event, compare_shift, away_players, home_players, last_event
 def process_miss(event, compare_shift, away_players, home_players, last_event, game_time_event):
     player_stats = []
     toi = calc_toi(game_time_event, last_event)
+    period_code = 0
+    if event['overtime']:
+        period_code = 1
+    elif event['shootout']:
+        period_code = 2
+    shot_attempt_code = ['shot_attempt', 'shot_attempt_overtime', 'shot_attempt_shootout'][period_code]
+    shot_missed_code = ['shot_missed', 'shot_missed_overtime', 'shot_missed_shootout'][period_code]
 
     for away_player in compare_shift['away_players']:
         player_id = away_players[int(away_player[0])]
         away_player_stats = create_player_stats(player_id)
         away_player_stats['toi'] += toi
         if event['miss'] == player_id['player_id']:
-            away_player_stats['hit_another_player'] += 1
-        if event['hittee_player'] == player_id['player_id']:
-            away_player_stats['hit_by_player'] += 1
+            away_player_stats[shot_attempt_code] += 1
+        if event['miss'] == player_id['player_id']:
+            away_player_stats[shot_missed_code] += 1
         player_stats.append(away_player_stats)
 
     for home_player in compare_shift['home_players']:
         player_id = home_players[int(home_player[0])]
         home_player_stats = create_player_stats(player_id)
         home_player_stats['toi'] += toi
-        if event['hitting_player'] == player_id['player_id']:
-            home_player_stats['hit_another_player'] += 1
-        if event['hittee_player'] == player_id['player_id']:
-            home_player_stats['hit_by_player'] += 1
+        if event['miss'] == player_id['player_id']:
+            home_player_stats[shot_attempt_code] += 1
+        if event['miss'] == player_id['player_id']:
+            home_player_stats[shot_missed_code] += 1
         player_stats.append(home_player_stats)
 
     return toi, player_stats
