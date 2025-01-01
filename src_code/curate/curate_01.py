@@ -515,7 +515,7 @@ def process_penalty(event, compare_shift, away_players, home_players, last_event
         away_player_stats['toi'] += toi
         if event['penalty_committed'] == player_id['player_id']:
             away_player_stats[penalties_code] += 1
-        if event['penalty_commited'] == player_id['player_id']:
+        if event['penalty_committed'] == player_id['player_id']:
             away_player_stats[penalties_duration_code] += event['penalty_duration']
         if event['penalty_drawn'] == player_id['player_id']:
             away_player_stats[penalties_drawn_code] += 1
@@ -528,7 +528,7 @@ def process_penalty(event, compare_shift, away_players, home_players, last_event
         home_player_stats['toi'] += toi
         if event['penalty_committed'] == player_id['player_id']:
             home_player_stats[penalties_code] += 1
-        if event['penalty_commited'] == player_id['player_id']:
+        if event['penalty_committed'] == player_id['player_id']:
             home_player_stats[penalties_duration_code] += event['penalty_duration']
         if event['penalty_drawn'] == player_id['player_id']:
             home_player_stats[penalties_drawn_code] += 1
@@ -575,17 +575,41 @@ def process_miss(event, compare_shift, away_players, home_players, last_event, g
 def process_stoppage(event, compare_shift, away_players, home_players, last_event, game_time_event):
     player_stats = []
     toi = calc_toi(game_time_event, last_event)
+    period_code = 0
+    if event['overtime']:
+        period_code = 1
+    elif event['shootout']:
+        period_code = 2
+    icing_code = ['icing', 'icing_overtime', 'icing_shootout'][period_code]
+    offside_code = ['offside', 'offside_overtime', 'offside_shootout'][period_code]
+
 
     for away_player in compare_shift['away_players']:
         player_id = away_players[int(away_player[0])]
         away_player_stats = create_player_stats(player_id)
         away_player_stats['toi'] += toi
+        if event['stoppage'] == 'icing':
+            away_player_stats[icing_code] += 1
+        elif event['stoppage'] in ['goalie-stopped-after-sog', 'puck-in-crowd']:
+            pass  # data lacks detail to specify which goalie / team
+        elif event['stoppage'] == 'offside':
+            away_player_stats[offside_code] += 1
+        else:
+            cwc = 0
         player_stats.append(away_player_stats)
 
     for home_player in compare_shift['home_players']:
         player_id = home_players[int(home_player[0])]
         home_player_stats = create_player_stats(player_id)
         home_player_stats['toi'] += toi
+        if event['stoppage'] == 'icing':
+            home_player_stats[icing_code] += 1
+        elif event['stoppage'] in ['goalie-stopped-after-sog', 'puck-in-crowd']:
+            pass  # data lacks detail to specify which goalie / team
+        elif event['stoppage'] == 'offside':
+            home_player_stats[offside_code] += 1
+        else:
+             cwc = 0
         player_stats.append(home_player_stats)
 
     return toi, player_stats
