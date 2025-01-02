@@ -41,47 +41,44 @@ def period_time_to_game_time(period, time_str):
             raise ValueError("Seconds must be between 0 and 59.")
 
         # Calculate elapsed time
-        elapsed_time = (period - 1) * 20
-        elapsed_time += (20 - minutes - seconds / 60)
+        elapsed_time = (period - 1) * 20 * 60
+        elapsed_time += (20 - minutes * 60 - seconds)
 
-        return round(elapsed_time, 3)
+        return elapsed_time
     except Exception as e:
         raise ValueError(f"Invalid input '{period}: {time_str}': {e}")
 
 
-def game_time_to_period_time(game_time):
+def game_time_to_period_time(game_time_seconds):
     """
-    Converts a game time index in minutes to a hockey period time string "period:mm:ss".
+    Converts a game time index in seconds to a hockey period time string "period:mm:ss".
 
     Parameters:
-    - game_time (float or int): Game time index in minutes.
+    - game_time_seconds (int): Game time index in seconds.
 
     Returns:
-    - str: Time in "period:mm:ss" format.
+    - tuple: (period (int), time_str (str) in "mm:ss" format).
 
     Raises:
-    - ValueError: If the game_time is out of expected range.
+    - ValueError: If the game_time_seconds is out of expected range.
     """
-    if not (0 <= game_time <= 60):
-        raise ValueError("Game time must be between 0 and 60 minutes.")
+    total_game_seconds = 60 * 60  # 60 minutes * 60 seconds
+    if not (0 <= game_time_seconds <= total_game_seconds):
+        raise ValueError("Game time must be between 0 and 3600 seconds (60 minutes).")
 
-    period_length = 20  # Each period is 20 minutes
-    period = int(game_time // period_length) + 1
+    period_length_seconds = 20 * 60  # Each period is 20 minutes
 
-    time_in_period = period_length - (game_time % period_length)
+    period = (game_time_seconds // period_length_seconds) + 1
+    if period > 3:
+        period = 3  # Assuming standard 3 periods; adjust if overtime is considered
 
-    minutes = int(time_in_period)
-    seconds = int(round((time_in_period - minutes) * 60))
+    time_into_period = game_time_seconds % period_length_seconds
+    time_remaining_in_period = period_length_seconds - time_into_period
 
-    # Handle cases where rounding seconds might make it 60
-    if seconds == 60:
-        minutes += 1
-        seconds = 0
-        if minutes > 20:
-            minutes = 20
-            seconds = 0
+    minutes = time_remaining_in_period // 60
+    seconds = time_remaining_in_period % 60
 
-    return period, f"{minutes:02d}:{seconds:02d}"
+    return period, f"{int(minutes):02d}:{int(seconds):02d}"
 
 
 def create_roster_dicts(data_game_roster, away_team, home_team):

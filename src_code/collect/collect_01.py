@@ -449,13 +449,16 @@ def process_plays(data):
             if shift['stoppage'] not in ['icing', 'goalie-stopped-after-sog', 'puck-in-crowd', 'puck-in-netting',
                                  'offside', 'puck-in-crowd', 'puck-in-benches', 'puck-frozen', 'tv-timeout',
                                  'high-stick', 'net-dislodged-defensive-skater', 'player-injury', 'video-review',
-                                 'referee-or-linesman',
+                                 'referee-or-linesman', 'clock-problem',
                                  'hand-pass', 'objects-on-ice', 'goalie-puck-frozen-played-from-beyond-center',
                                  'visitor-timeout', 'net-dislodged-offensive-skater', 'chlg-hm-goal-interference',
-                                 'chlg-vis-goal-interference', 'chlg-hm-missed-stoppage', 'skater-puck-frozen',
+                                 'chlg-vis-goal-interference', 'chlg-hm-missed-stoppage',
+                                 'skater-puck-frozen', 'ice-scrape', 'chlg-league-goal-interference',
                                  'player-equipment', 'chlg-hm-off-side', 'chlg-vis-off-side',
-                                 'chlg-hm-missed-stoppage', 'home-timeout']:
-                print(f'play stoppage reason: {play["details"]["reason"]}')
+                                 'chlg-hm-missed-stoppage', 'home-timeout', 'chlg-vis-missed-stoppage',
+                                 'puck-in-penalty-benches', 'ice-problem', 'net-dislodged-by-goaltender',
+                                 'rink-repair', 'chlg-league-missed-stoppage', 'official-injury']:
+                print(f'collect play stoppage reason: {play["details"]["reason"]}')
         elif play.get('typeCode') in [520, 524]:  # period-start / game-end
             if play['typeCode'] == 520 and play['periodDescriptor']['periodType'] == 'OT':
                 shift['overtime'] = True
@@ -527,7 +530,7 @@ def check_copyright(text):
 
     # Check if the year is in the expected range
     check = False
-    for yr in ["2018", "2019", "2020", "2021", "2022", "2023", "2024"]:
+    for yr in ["2018", "2019", "2020", "2021", "2022", "2023", "2024", "2025"]:
         if yr in text:
             check = True
 

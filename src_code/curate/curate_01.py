@@ -80,7 +80,7 @@ def curate_data(config):
                 elif event_details['event_name'] == 'blocked-shot':
                     toi, player_stats = process_blocked_shot(event, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'penalty':
-                    toi, player_stats = process_penalty(event, compare_shift, away_players, home_players, last_event, game_time_event)
+                    toi, player_stats = process_penalty(event, compare_shift, away_players_sorted, home_players_sorted, last_event, game_time_event)
                 elif event_details['event_name'] == 'stoppage':
                     toi, player_stats = process_stoppage(event, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'period-end':
@@ -183,7 +183,7 @@ def curate_data(config):
         # Step 2: Concatenate df and the modified new_columns_df along the columns
         df = pd.concat([df, new_columns_df], axis=1)
 
-        attributes_to_sum = ['goal', 'assist', 'shot_on_goal', 'goal_against', 'goal_overtime', 'goal_shootout', 'penalties_duration']  # Example attributes
+        attributes_to_sum = ['goal', 'assist', 'shot_on_goal', 'goal_against', 'goal_overtime', 'goal_shootout', 'penalties_duration', 'hit_another_player', 'hit_by_player']  # Example attributes
 
         # Initialize columns for summed attributes
 
@@ -212,9 +212,45 @@ def curate_data(config):
             sum_list = [int(x) for x in sum_series]
             team_sums['home'][f'home_{attr}_sum'] = sum(sum_list)
 
-        print(f'toi: {df["time_on_ice"].sum()}')
-        print(f'shift data: {team_sums["away"]}  {team_sums["home"]}')
-        print(f'boxscore data: away_goals {data_games[i_game]["away_goals"]} away_sog {data_games[i_game]["away_sog"]}  home_goals {data_games[i_game]["home_goals"]} home_sog {data_games[i_game]["home_sog"]}')
+        print(f'game_id: {game_id[0]}  toi: {df["time_on_ice"].sum()} {data_games[i_game]["playbyplay"]}')
+        all_good = True
+        reason = ''
+        if data_games[i_game]['away_goals'] != team_sums['away']['away_goal_sum']:
+            all_good = False
+            reason = 'away_goals'
+        if data_games[i_game]['home_goals'] != team_sums['home']['home_goal_sum']:
+            all_good = False
+            reason = 'home_goals'
+        if data_games[i_game]['away_sog'] != team_sums['away']['away_shot_on_goal_sum']:
+            all_good = False
+            reason = 'away_sog'
+        if data_games[i_game]['home_sog'] != team_sums['home']['home_shot_on_goal_sum']:
+            all_good = False
+            reason = 'home_sog'
+        if data_games[i_game]['away_pim'] != team_sums['away']['away_penalties_duration_sum']:
+            all_good = False
+            reason = 'away_pim'
+        if data_games[i_game]['home_pim'] != team_sums['home']['home_penalties_duration_sum']:
+            all_good = False
+            reason = 'home_pim'
+        if data_games[i_game]['away_hits'] != team_sums['away']['away_hit_another_player_sum']:
+            all_good = False
+            reason = 'away_hits'
+        if data_games[i_game]['home_hits'] != team_sums['home']['home_hit_another_player_sum']:
+            all_good = False
+            reason = 'home_hits'
+        if data_games[i_game]['away_hits'] != team_sums['home']['home_hit_by_player_sum']:
+            all_good = False
+            reason = 'away_hits_v2'
+        if data_games[i_game]['home_hits'] != team_sums['away']['away_hit_by_player_sum']:
+            all_good = False
+            reason = 'home_hits_v2'
+
+        if not all_good:
+            print(f'reason: {reason}')
+            print(f'shift data: {team_sums["away"]}  {team_sums["home"]}')
+            print(f'boxscore data: away_goals {data_games[i_game]["away_goals"]} away_sog {data_games[i_game]["away_sog"]}  home_goals {data_games[i_game]["home_goals"]} home_sog {data_games[i_game]["home_sog"]}')
+
         # Step 4: Export the DataFrame to CSV
         df.to_csv(config.file_paths['game_output'] + f'{str(game_id[0])}.csv', na_rep='', index=False)
 
@@ -501,7 +537,7 @@ def process_blocked_shot(event, compare_shift, away_players, home_players, last_
     return toi, player_stats
 
 
-def process_penalty(event, compare_shift, away_players, home_players, last_event, game_time_event):
+def process_penalty(event, compare_shift, away_players_sorted, home_players_sorted, last_event, game_time_event):
     player_stats = []
     toi = calc_toi(game_time_event, last_event)
     period_code = 0
@@ -513,28 +549,32 @@ def process_penalty(event, compare_shift, away_players, home_players, last_event
     penalties_drawn_code = ['penalties_drawn', 'penalties_drawn_overtime', 'penalties_drawn_shootout'][period_code]
     penalties_duration_code = ['penalties_duration', 'penalties_duration_overtime', 'penalties_duration_shootout'][period_code]
 
-    for away_player in compare_shift['away_players']:
-        player_id = away_players[int(away_player[0])]
-        away_player_stats = create_player_stats(player_id)
-        away_player_stats['toi'] += toi
-        if event['penalty_committed'] == player_id['player_id']:
+    on_ice = [int(sweater[0]) for sweater in compare_shift['away_players']]
+    for player_id in away_players_sorted.keys():
+        player_data = away_players_sorted[player_id]
+        away_player_stats = create_player_stats(player_data)
+        if away_players_sorted[player_id]['player_sweater'] in on_ice:
+            away_player_stats['toi'] += toi
+        if event['penalty_committed'] == player_id:
             away_player_stats[penalties_code] += 1
-        if event['penalty_committed'] == player_id['player_id']:
+        if event['penalty_committed'] == player_id:
             away_player_stats[penalties_duration_code] += event['penalty_duration']
-        if event['penalty_drawn'] == player_id['player_id']:
+        if event['penalty_drawn'] == player_id:
             away_player_stats[penalties_drawn_code] += 1
 
         player_stats.append(away_player_stats)
 
-    for home_player in compare_shift['home_players']:
-        player_id = home_players[int(home_player[0])]
-        home_player_stats = create_player_stats(player_id)
-        home_player_stats['toi'] += toi
-        if event['penalty_committed'] == player_id['player_id']:
+    on_ice = [int(sweater[0]) for sweater in compare_shift['home_players']]
+    for player_id in home_players_sorted.keys():
+        player_data = home_players_sorted[player_id]
+        home_player_stats = create_player_stats(player_data)
+        if home_players_sorted[player_id]['player_sweater'] in on_ice:
+            home_player_stats['toi'] += toi
+        if event['penalty_committed'] == player_id:
             home_player_stats[penalties_code] += 1
-        if event['penalty_committed'] == player_id['player_id']:
+        if event['penalty_committed'] == player_id:
             home_player_stats[penalties_duration_code] += event['penalty_duration']
-        if event['penalty_drawn'] == player_id['player_id']:
+        if event['penalty_drawn'] == player_id:
             home_player_stats[penalties_drawn_code] += 1
 
         player_stats.append(home_player_stats)
@@ -595,15 +635,18 @@ def process_stoppage(event, compare_shift, away_players, home_players, last_even
         if event['stoppage'] in ['icing', 'goalie-stopped-after-sog', 'puck-in-crowd', 'puck-in-netting',
                                  'offside', 'puck-in-crowd', 'puck-in-benches', 'puck-frozen', 'tv-timeout',
                                  'high-stick', 'net-dislodged-defensive-skater', 'player-injury', 'video-review',
-                                 'referee-or-linesman',
+                                 'referee-or-linesman', 'chlg-league-goal-interference',
                                  'hand-pass', 'objects-on-ice', 'goalie-puck-frozen-played-from-beyond-center',
                                  'visitor-timeout', 'net-dislodged-offensive-skater', 'chlg-hm-goal-interference',
-                                 'chlg-vis-goal-interference', 'chlg-hm-missed-stoppage', 'skater-puck-frozen',
+                                 'chlg-vis-goal-interference', 'chlg-hm-missed-stoppage', 'chlg-vis-missed-stoppage',
+                                 'skater-puck-frozen', 'ice-scrape', 'chlg-league-missed-stoppage',
                                  'player-equipment', 'chlg-hm-off-side', 'chlg-vis-off-side',
-                                 'chlg-hm-missed-stoppage', 'home-timeout']:
+                                 'chlg-hm-missed-stoppage', 'home-timeout', 'clock-problem',
+                                 'puck-in-penalty-benches', 'ice-problem', 'net-dislodged-by-goaltender',
+                                 'rink-repair', 'official-injury']:
             pass  # data lacks detail to specify which goalie / team
         else:
-            print(f'stoppage reason: {event["stoppage"]}')
+            print(f'away stoppage reason: {event["stoppage"]}')
         player_stats.append(away_player_stats)
 
     for home_player in compare_shift['home_players']:
@@ -613,15 +656,18 @@ def process_stoppage(event, compare_shift, away_players, home_players, last_even
         if event['stoppage'] in ['icing', 'goalie-stopped-after-sog', 'puck-in-crowd', 'puck-in-netting',
                                  'offside', 'puck-in-crowd', 'puck-in-benches', 'puck-frozen', 'tv-timeout',
                                  'high-stick', 'net-dislodged-defensive-skater', 'player-injury', 'video-review',
-                                 'referee-or-linesman',
+                                 'referee-or-linesman', 'chlg-league-goal-interference',
                                  'hand-pass', 'objects-on-ice', 'goalie-puck-frozen-played-from-beyond-center',
                                  'visitor-timeout', 'net-dislodged-offensive-skater', 'chlg-hm-goal-interference',
-                                 'chlg-vis-goal-interference', 'chlg-hm-missed-stoppage', 'skater-puck-frozen',
+                                 'chlg-vis-goal-interference', 'chlg-hm-missed-stoppage', 'chlg-vis-missed-stoppage',
+                                 'skater-puck-frozen', 'ice-scrape', 'chlg-league-missed-stoppage',
                                  'player-equipment', 'chlg-hm-off-side', 'chlg-vis-off-side',
-                                 'chlg-hm-missed-stoppage', 'home-timeout']:
+                                 'chlg-hm-missed-stoppage', 'home-timeout', 'clock-problem',
+                                 'puck-in-penalty-benches', 'ice-problem', 'net-dislodged-by-goaltender',
+                                 'rink-repair', 'official-injury']:
             pass  # data lacks detail to specify which goalie / team
         else:
-             print(f'stoppage reason: {event["stoppage"]}')
+             print(f'home stoppage reason: {event["stoppage"]}')
         player_stats.append(home_player_stats)
 
     return toi, player_stats
