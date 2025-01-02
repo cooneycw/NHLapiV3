@@ -12,15 +12,17 @@ def load_data():
         obj = pickle.load(inp)
     return obj
 
+
 def period_time_to_game_time(period, time_str):
     """
-    Converts a hockey period time (e.g., "2:05:30") to a game time index in minutes.
+    Converts a hockey period time (e.g., "20:00") to a game time index in seconds.
 
     Parameters:
-    - period_time_str (str): Time in "period:mm:ss" format.
+    - period (int): The current period number.
+    - time_str (str): Time in "mm:ss" format.
 
     Returns:
-    - float: Game time index in minutes.
+    - int: Game time index in seconds.
 
     Raises:
     - ValueError: If the input format is incorrect or values are out of expected ranges.
@@ -28,7 +30,7 @@ def period_time_to_game_time(period, time_str):
     try:
         parts = time_str.strip().split(':')
         if len(parts) != 2:
-            raise ValueError("Input must be in 'period:mm:ss' format.")
+            raise ValueError("Input must be in 'mm:ss' format.")
 
         minutes = int(parts[0])
         seconds = int(parts[1])
@@ -36,13 +38,13 @@ def period_time_to_game_time(period, time_str):
         if period < 1:
             raise ValueError("Period must be at least 1.")
         if not (0 <= minutes <= 20):
-            raise ValueError("Minutes must be between 0 and 19.")
+            raise ValueError("Minutes must be between 0 and 20.")
         if not (0 <= seconds < 60):
             raise ValueError("Seconds must be between 0 and 59.")
 
-        # Calculate elapsed time
+        # Calculate elapsed time in seconds
         elapsed_time = (period - 1) * 20 * 60
-        elapsed_time += (20 - minutes * 60 - seconds)
+        elapsed_time += (20 * 60 - (minutes * 60 + seconds))
 
         return elapsed_time
     except Exception as e:
@@ -51,7 +53,7 @@ def period_time_to_game_time(period, time_str):
 
 def game_time_to_period_time(game_time_seconds):
     """
-    Converts a game time index in seconds to a hockey period time string "period:mm:ss".
+    Converts a game time index in seconds to a hockey period time string "mm:ss".
 
     Parameters:
     - game_time_seconds (int): Game time index in seconds.
@@ -62,11 +64,15 @@ def game_time_to_period_time(game_time_seconds):
     Raises:
     - ValueError: If the game_time_seconds is out of expected range.
     """
-    total_game_seconds = 60 * 60  # 60 minutes * 60 seconds
+    total_game_seconds = 3 * 20 * 60  # 60 minutes * 60 seconds
     if not (0 <= game_time_seconds <= total_game_seconds):
         raise ValueError("Game time must be between 0 and 3600 seconds (60 minutes).")
 
     period_length_seconds = 20 * 60  # Each period is 20 minutes
+
+    if game_time_seconds == total_game_seconds:
+        # End of the game
+        return 3, "0:00"
 
     period = (game_time_seconds // period_length_seconds) + 1
     if period > 3:
@@ -198,3 +204,16 @@ def create_player_stats(player_id):
         'goal_against_shootout': 0,
     }
     return player_stats
+
+
+def create_dummy_player(game_id, team_abbrev, player_id):
+    return {
+        'game_id': game_id,
+        'player_team': team_abbrev,
+        'player_id': player_id,  # or a placeholder like 'DUMMY'
+        'player_last_name': {'default': 'XX'},
+        'player_first_name': {'default': 'XX'},
+        'player_sweater': '-1',
+        'player_position': ' '
+    }
+

@@ -13,7 +13,7 @@ class Config:
     def __init__(self, input_dict):
         self.verbose = input_dict['verbose']
         #  self.curr_date = datetime.now().date()
-        self.curr_date = datetime(2024, 10, 30).date()
+        self.curr_date = datetime(2024, 10, 10).date()
         self.base_url = "https://api-web.nhle.com"
         self.base_url_lines = "https://www.dailyfaceoff.com"
         self.headers_lines = {
@@ -157,7 +157,7 @@ class Config:
         }
         shift_categ['CHL'] = {
             'shift_name': 'stoppage',
-            'sport_stat': True,
+            'sport_stat': False,
         }
         shift_categ['PEND'] = {
             'shift_name': 'period-end',
@@ -168,7 +168,7 @@ class Config:
             'sport_stat': False,
         }
         shift_categ['TAKE'] = {
-            'shift_name': 'giveaway',
+            'shift_name': 'takeaway',
             'sport_stat': True,
         }
         shift_categ['SPC'] = {
@@ -245,7 +245,7 @@ class Config:
             'sport_stat': False,
         }
         event_categ[525] = {
-            'event_name': 'giveaway',
+            'event_name': 'takeaway',
             'sport_stat': True,
         }
         event_categ[535] = {

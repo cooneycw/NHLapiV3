@@ -22,6 +22,10 @@ def curate_data(config):
     event_categ = config.event_categ
     shift_categ = config.shift_categ
     for i_game, game in enumerate(data_plays):
+        # if data_games[i_game]['id'] != 2024020007:
+        #     continue
+        # else:
+        #     cwc = 0
         i_shift = 0
         game_id = []
         game_date = []
@@ -54,15 +58,24 @@ def curate_data(config):
             while True:
                 compare_shift = data_shifts[i_game][i_shift]
                 shift_details = shift_categ.get(compare_shift['event_type'])
+                print('\n')
+                print(f'i_shift: {i_shift}  i_event: {i_event}')
+                print(f'event: {event["period"]} {event["elapsed_time"]} {event["event_type"]} {event["event_code"]} ')
+                print(f'shift: {compare_shift["period"]} {compare_shift["elapsed_time"]} {shift_details["shift_name"]} {compare_shift["event_type"]} {shift_details["sport_stat"]}')
+                print('\n')
+
                 if shift_details is None:
                     cwc = 0
                 if not shift_details['sport_stat']:
                     i_shift += 1
                     continue
                 break
-            # print(f'i_event: {i_event}  i_shift: {i_shift}')
-            game_time_shift = period_time_to_game_time(event['period'], event['game_time'])
-            del_penalty = False
+
+            game_time_shift = period_time_to_game_time(int(compare_shift['period']), compare_shift['game_time'])
+            if (event_details['event_name'] == 'takeaway') and (shift_details['shift_name'] == 'giveaway') and (game_time_event == game_time_shift):
+                cwc = 0
+            if (event_details['event_name'] == 'giveaway') and (shift_details['shift_name'] == 'takeaway') and (game_time_event == game_time_shift):
+                cwc = 0
             if (event_details['event_name'] == shift_details['shift_name']) and (game_time_event == game_time_shift):
                 empty_net_data = process_empty_net(compare_shift)
                 if event_details['event_name'] == 'faceoff':
@@ -70,6 +83,8 @@ def curate_data(config):
                 elif event_details['event_name'] == 'hit':  #503
                     toi, player_stats = process_hit(event, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'giveaway': #504
+                    toi, player_stats = process_giveaway(event, compare_shift, away_players, home_players, last_event, game_time_event)
+                elif event_details['event_name'] == 'takeaway': #504
                     toi, player_stats = process_giveaway(event, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'goal':  # 505
                     toi, player_stats = process_goal(event, compare_shift, away_players, home_players, last_event, game_time_event)
@@ -85,6 +100,8 @@ def curate_data(config):
                     toi, player_stats = process_stoppage(event, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'period-end':
                     toi, player_stats = process_period_end(event, compare_shift, away_players, home_players, last_event, game_time_event)
+
+
                 #elif event_details['event_name'] == 'game-end':
                 #    toi, player_stats = process_game_end(event, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'delayed-penalty':
@@ -250,7 +267,10 @@ def curate_data(config):
             print(f'reason: {reason}')
             print(f'shift data: {team_sums["away"]}  {team_sums["home"]}')
             print(f'boxscore data: away_goals {data_games[i_game]["away_goals"]} away_sog {data_games[i_game]["away_sog"]}  home_goals {data_games[i_game]["home_goals"]} home_sog {data_games[i_game]["home_sog"]}')
+        else:
+            print(f'game totals confirmed')
 
+        print('\n')
         # Step 4: Export the DataFrame to CSV
         df.to_csv(config.file_paths['game_output'] + f'{str(game_id[0])}.csv', na_rep='', index=False)
 
@@ -353,6 +373,29 @@ def process_hit(event, compare_shift, away_players, home_players, last_event, ga
     return toi, player_stats
 
 
+def process_takeaway(event, compare_shift, away_players, home_players, last_event, game_time_event):
+    player_stats = []
+    toi = calc_toi(game_time_event, last_event)
+
+    for away_player in compare_shift['away_players']:
+        player_id = away_players[int(away_player[0])]
+        away_player_stats = create_player_stats(player_id)
+        away_player_stats['toi'] += toi
+        if event['takeaway'] == player_id['player_id']:
+            away_player_stats['takeaways'] += 1
+        player_stats.append(away_player_stats)
+
+    for home_player in compare_shift['home_players']:
+        player_id = home_players[int(home_player[0])]
+        home_player_stats = create_player_stats(player_id)
+        home_player_stats['toi'] += toi
+        if event['takeaway'] == player_id['player_id']:
+            home_player_stats['takeaways'] += 1
+        player_stats.append(home_player_stats)
+
+    return toi, player_stats
+
+
 def process_giveaway(event, compare_shift, away_players, home_players, last_event, game_time_event):
     player_stats = []
     toi = calc_toi(game_time_event, last_event)
@@ -363,8 +406,6 @@ def process_giveaway(event, compare_shift, away_players, home_players, last_even
         away_player_stats['toi'] += toi
         if event['giveaway'] == player_id['player_id']:
             away_player_stats['giveaways'] += 1
-        if event['takeaway'] == player_id['player_id']:
-            away_player_stats['takeaways'] += 1
         player_stats.append(away_player_stats)
 
     for home_player in compare_shift['home_players']:
@@ -373,8 +414,6 @@ def process_giveaway(event, compare_shift, away_players, home_players, last_even
         home_player_stats['toi'] += toi
         if event['giveaway'] == player_id['player_id']:
             home_player_stats['giveaways'] += 1
-        if event['takeaway'] == player_id['player_id']:
-            home_player_stats['takeaways'] += 1
         player_stats.append(home_player_stats)
 
     return toi, player_stats

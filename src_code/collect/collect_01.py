@@ -1,5 +1,6 @@
 from bs4 import BeautifulSoup
 from datetime import datetime
+from src_code.utils.utils import create_dummy_player
 import re
 import requests
 
@@ -361,11 +362,19 @@ def process_shifts(config, soup):
 
 
 def process_game_rosters(data):
+    away_team = data['awayTeam']['abbrev']
+    home_team = data['homeTeam']['abbrev']
     rosters = list()
     teams = dict()
     teams[data['awayTeam']['id']] = data['awayTeam']['abbrev']
     teams[data['homeTeam']['id']] = data['homeTeam']['abbrev']
+    away_cnt = 0
+    home_cnt = 0
     for player in data['rosterSpots']:
+        if teams[player['teamId']] == away_team:
+            away_cnt += 1
+        else:
+            home_cnt += 1
         roster = dict()
         roster['game_id'] = data['id']
         roster['player_team'] = teams[player['teamId']]
@@ -375,6 +384,34 @@ def process_game_rosters(data):
         roster['player_sweater'] = player['sweaterNumber']
         roster['player_position'] = player['positionCode']
         rosters.append(roster)
+
+    default_id = 1000000
+    # Pad away team roster if less than 20
+    if away_cnt < 20:
+        missing = 20 - away_cnt
+        for _ in range(missing):
+            dummy_player = create_dummy_player(
+                game_id=data['id'],
+                team_abbrev=away_team,
+                player_id= default_id,
+            )
+            default_id += 1
+            print(f'padding players for {data["id"]}')
+            rosters.append(dummy_player)
+
+    # Pad home team roster if less than 20
+    if home_cnt < 20:
+        missing = 20 - home_cnt
+        for _ in range(missing):
+            dummy_player = create_dummy_player(
+                game_id=data['id'],
+                team_abbrev=home_team ,
+                player_id=default_id,
+            )
+            default_id += 1
+            print(f'padding players for {data["id"]}')
+            rosters.append(dummy_player)
+
     return rosters
 
 def process_plays(data):
@@ -389,6 +426,7 @@ def process_plays(data):
         shift['game_time'] = play['timeRemaining']
         shift['event_type'] = play['typeDescKey']
         shift['event_code'] = play['typeCode']
+        shift['stoppage'] = None
         shift['faceoff_winner'] = None
         shift['faceoff_loser'] = None
         shift['hitting_player'] = None
