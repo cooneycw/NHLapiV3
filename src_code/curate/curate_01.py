@@ -58,11 +58,11 @@ def curate_data(config):
             while True:
                 compare_shift = data_shifts[i_game][i_shift]
                 shift_details = shift_categ.get(compare_shift['event_type'])
-                print('\n')
-                print(f'i_shift: {i_shift}  i_event: {i_event}')
-                print(f'event: {event["period"]} {event["elapsed_time"]} {event["event_type"]} {event["event_code"]} ')
-                print(f'shift: {compare_shift["period"]} {compare_shift["elapsed_time"]} {shift_details["shift_name"]} {compare_shift["event_type"]} {shift_details["sport_stat"]}')
-                print('\n')
+                # print('\n')
+                # print(f'i_shift: {i_shift}  i_event: {i_event}')
+                # print(f'event: {event["period"]} {event["elapsed_time"]} {event["event_type"]} {event["event_code"]} ')
+                # print(f'shift: {compare_shift["period"]} {compare_shift["elapsed_time"]} {shift_details["shift_name"]} {compare_shift["event_type"]} {shift_details["sport_stat"]}')
+                # print('\n')
 
                 if shift_details is None:
                     cwc = 0
@@ -85,7 +85,7 @@ def curate_data(config):
                 elif event_details['event_name'] == 'giveaway': #504
                     toi, player_stats = process_giveaway(event, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'takeaway': #504
-                    toi, player_stats = process_giveaway(event, compare_shift, away_players, home_players, last_event, game_time_event)
+                    toi, player_stats = process_takeaway(event, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'goal':  # 505
                     toi, player_stats = process_goal(event, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'shot-on-goal': #506
@@ -200,7 +200,7 @@ def curate_data(config):
         # Step 2: Concatenate df and the modified new_columns_df along the columns
         df = pd.concat([df, new_columns_df], axis=1)
 
-        attributes_to_sum = ['goal', 'assist', 'shot_on_goal', 'goal_against', 'goal_overtime', 'goal_shootout', 'penalties_duration', 'hit_another_player', 'hit_by_player']  # Example attributes
+        attributes_to_sum = ['goal', 'assist', 'shot_on_goal', 'shot_on_goal_overtime',  'goal_against', 'goal_overtime', 'goal_shootout', 'penalties_duration', 'penalties_duration_overtime', 'hit_another_player', 'hit_by_player']  # Example attributes
 
         # Initialize columns for summed attributes
 
@@ -232,22 +232,22 @@ def curate_data(config):
         print(f'game_id: {game_id[0]}  toi: {df["time_on_ice"].sum()} {data_games[i_game]["playbyplay"]}')
         all_good = True
         reason = ''
-        if data_games[i_game]['away_goals'] != team_sums['away']['away_goal_sum']:
+        if data_games[i_game]['away_goals'] != (team_sums['away']['away_goal_sum'] + team_sums['away']['away_goal_overtime_sum']):
             all_good = False
             reason = 'away_goals'
-        if data_games[i_game]['home_goals'] != team_sums['home']['home_goal_sum']:
+        if data_games[i_game]['home_goals'] != (team_sums['home']['home_goal_sum'] + team_sums['home']['home_goal_overtime_sum']):
             all_good = False
             reason = 'home_goals'
-        if data_games[i_game]['away_sog'] != team_sums['away']['away_shot_on_goal_sum']:
+        if data_games[i_game]['away_sog'] != (team_sums['away']['away_shot_on_goal_sum'] + team_sums['away']['away_shot_on_goal_overtime_sum']):
             all_good = False
             reason = 'away_sog'
-        if data_games[i_game]['home_sog'] != team_sums['home']['home_shot_on_goal_sum']:
+        if data_games[i_game]['home_sog'] != (team_sums['home']['home_shot_on_goal_sum'] + team_sums['home']['home_shot_on_goal_overtime_sum']):
             all_good = False
             reason = 'home_sog'
-        if data_games[i_game]['away_pim'] != team_sums['away']['away_penalties_duration_sum']:
+        if data_games[i_game]['away_pim'] != (team_sums['away']['away_penalties_duration_sum'] + team_sums['away']['away_penalties_duration_overtime_sum']):
             all_good = False
             reason = 'away_pim'
-        if data_games[i_game]['home_pim'] != team_sums['home']['home_penalties_duration_sum']:
+        if data_games[i_game]['home_pim'] != (team_sums['home']['home_penalties_duration_sum'] + team_sums['home']['home_penalties_duration_overtime_sum']):
             all_good = False
             reason = 'home_pim'
         if data_games[i_game]['away_hits'] != team_sums['away']['away_hit_another_player_sum']:
