@@ -451,6 +451,7 @@ def process_plays(data):
         shift['blocked_shot_saved'] = None
         shift['icing'] = None
         shift['penalty_committed'] = None
+        shift['penalty_served'] = None
         shift['penalty_drawn'] = None
         shift['penalty_duration'] = None
         shift['delayed_penalty'] = None
@@ -481,9 +482,12 @@ def process_plays(data):
             shift['blocked_shot_attempt'] = play['details'].get('shootingPlayerId', None)
             shift['blocked_shot_saved'] = play['details'].get('blockingPlayerId', None)
         elif play.get('typeCode') == 509:
-            shift['penalty_committed'] = play['details'].get('committedByPlayerId', None)
-            shift['penalty_drawn'] = play['details'].get('drawnByPlayerId', None)
             shift['penalty_duration'] = play['details'].get('duration', None)
+            if play['details'].get('committedByPlayerId', None) is not None:
+                shift['penalty_committed'] = play['details'].get('committedByPlayerId', None)
+                shift['penalty_drawn'] = play['details'].get('drawnByPlayerId', None)
+            elif play['details'].get('servedByPlayerId', None) is not None:
+                shift['penalty_served'] = play['details'].get('servedByPlayerId', None)
         elif play.get('typeCode') == 510:
             cwc = 0
         elif play.get('typeCode') == 516:

@@ -22,7 +22,7 @@ def curate_data(config):
     event_categ = config.event_categ
     shift_categ = config.shift_categ
     for i_game, game in enumerate(data_plays):
-        # if data_games[i_game]['id'] != 2024020007:
+        # if data_games[i_game]['id'] !=  2024020016:
         #     continue
         # else:
         #     cwc = 0
@@ -58,11 +58,11 @@ def curate_data(config):
             while True:
                 compare_shift = data_shifts[i_game][i_shift]
                 shift_details = shift_categ.get(compare_shift['event_type'])
-                # print('\n')
-                # print(f'i_shift: {i_shift}  i_event: {i_event}')
-                # print(f'event: {event["period"]} {event["elapsed_time"]} {event["event_type"]} {event["event_code"]} ')
-                # print(f'shift: {compare_shift["period"]} {compare_shift["elapsed_time"]} {shift_details["shift_name"]} {compare_shift["event_type"]} {shift_details["sport_stat"]}')
-                # print('\n')
+                print('\n')
+                print(f'i_shift: {i_shift}  i_event: {i_event}')
+                print(f'event: {event["period"]} {event["elapsed_time"]} {event["event_type"]} {event["event_code"]} ')
+                print(f'shift: {compare_shift["period"]} {compare_shift["elapsed_time"]} {shift_details["shift_name"]} {compare_shift["event_type"]} {shift_details["sport_stat"]}')
+                print('\n')
 
                 if shift_details is None:
                     cwc = 0
@@ -200,7 +200,7 @@ def curate_data(config):
         # Step 2: Concatenate df and the modified new_columns_df along the columns
         df = pd.concat([df, new_columns_df], axis=1)
 
-        attributes_to_sum = ['goal', 'assist', 'shot_on_goal', 'shot_on_goal_overtime',  'goal_against', 'goal_overtime', 'goal_shootout', 'penalties_duration', 'penalties_duration_overtime', 'hit_another_player', 'hit_by_player']  # Example attributes
+        attributes_to_sum = ['goal', 'assist', 'shot_on_goal', 'shot_on_goal_overtime',  'goal_against', 'goal_overtime', 'goal_shootout', 'penalties_duration', 'penalties_duration_overtime', 'hit_another_player', 'hit_by_player', 'giveaways', 'takeaways']  # Example attributes
 
         # Initialize columns for summed attributes
 
@@ -262,6 +262,19 @@ def curate_data(config):
         if data_games[i_game]['home_hits'] != team_sums['away']['away_hit_by_player_sum']:
             all_good = False
             reason = 'home_hits_v2'
+        if data_games[i_game]['away_give'] != team_sums['away']['away_giveaways_sum']:
+            all_good = False
+            reason = 'away_giveaways'
+        if data_games[i_game]['home_give'] != team_sums['home']['home_giveaways_sum']:
+            all_good = False
+            reason = 'home_giveaways'
+        if data_games[i_game]['away_take'] != team_sums['away']['away_takeaways_sum']:
+            all_good = False
+            reason = 'away_giveaways'
+        if data_games[i_game]['home_take'] != team_sums['home']['home_takeaways_sum']:
+            all_good = False
+            reason = 'home_giveaways'
+
 
         if not all_good:
             print(f'reason: {reason}')
@@ -585,6 +598,7 @@ def process_penalty(event, compare_shift, away_players_sorted, home_players_sort
     elif event['shootout']:
         period_code = 2
     penalties_code = ['penalties', 'penalties_overtime', 'penalties_shootout'][period_code]
+    penalties_served_code = ['penalties_served', 'penalties_served_overtime', 'penalties_served_shootout'][period_code]
     penalties_drawn_code = ['penalties_drawn', 'penalties_drawn_overtime', 'penalties_drawn_shootout'][period_code]
     penalties_duration_code = ['penalties_duration', 'penalties_duration_overtime', 'penalties_duration_shootout'][period_code]
 
@@ -594,9 +608,11 @@ def process_penalty(event, compare_shift, away_players_sorted, home_players_sort
         away_player_stats = create_player_stats(player_data)
         if away_players_sorted[player_id]['player_sweater'] in on_ice:
             away_player_stats['toi'] += toi
+        if event['penalty_served'] == player_id:
+            away_player_stats[penalties_served_code] += 1
         if event['penalty_committed'] == player_id:
             away_player_stats[penalties_code] += 1
-        if event['penalty_committed'] == player_id:
+        if (event['penalty_committed'] == player_id) or (event['penalty_served'] == player_id):
             away_player_stats[penalties_duration_code] += event['penalty_duration']
         if event['penalty_drawn'] == player_id:
             away_player_stats[penalties_drawn_code] += 1
@@ -609,9 +625,11 @@ def process_penalty(event, compare_shift, away_players_sorted, home_players_sort
         home_player_stats = create_player_stats(player_data)
         if home_players_sorted[player_id]['player_sweater'] in on_ice:
             home_player_stats['toi'] += toi
+        if event['penalty_served'] == player_id['player_id']:
+            home_player_stats[penalties_served_code] += 1
         if event['penalty_committed'] == player_id:
             home_player_stats[penalties_code] += 1
-        if event['penalty_committed'] == player_id:
+        if (event['penalty_committed'] == player_id) or (event['penalty_served'] == player_id):
             home_player_stats[penalties_duration_code] += event['penalty_duration']
         if event['penalty_drawn'] == player_id:
             home_player_stats[penalties_drawn_code] += 1
