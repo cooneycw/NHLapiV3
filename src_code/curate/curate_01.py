@@ -22,10 +22,10 @@ def curate_data(config):
     event_categ = config.event_categ
     shift_categ = config.shift_categ
     for i_game, game in enumerate(data_plays):
-        # if data_games[i_game]['id'] !=  2024020016:
-        #     continue
-        # else:
-        #     cwc = 0
+    #     if data_games[i_game]['id'] !=  2024020218:
+    #         continue
+    #     else:
+    #         cwc = 0
         i_shift = 0
         game_id = []
         game_date = []
@@ -58,11 +58,6 @@ def curate_data(config):
             while True:
                 compare_shift = data_shifts[i_game][i_shift]
                 shift_details = shift_categ.get(compare_shift['event_type'])
-                print('\n')
-                print(f'i_shift: {i_shift}  i_event: {i_event}')
-                print(f'event: {event["period"]} {event["elapsed_time"]} {event["event_type"]} {event["event_code"]} ')
-                print(f'shift: {compare_shift["period"]} {compare_shift["elapsed_time"]} {shift_details["shift_name"]} {compare_shift["event_type"]} {shift_details["sport_stat"]}')
-                print('\n')
 
                 if shift_details is None:
                     cwc = 0
@@ -72,11 +67,8 @@ def curate_data(config):
                 break
 
             game_time_shift = period_time_to_game_time(int(compare_shift['period']), compare_shift['game_time'])
-            if (event_details['event_name'] == 'takeaway') and (shift_details['shift_name'] == 'giveaway') and (game_time_event == game_time_shift):
-                cwc = 0
-            if (event_details['event_name'] == 'giveaway') and (shift_details['shift_name'] == 'takeaway') and (game_time_event == game_time_shift):
-                cwc = 0
-            if (event_details['event_name'] == shift_details['shift_name']) and (game_time_event == game_time_shift):
+            if ((event_details['event_name'] == shift_details['shift_name']) and (game_time_event == game_time_shift) or
+                (event_details['event_name'] == 'penalty-shot') and (game_time_event == game_time_shift)):
                 empty_net_data = process_empty_net(compare_shift)
                 if event_details['event_name'] == 'faceoff':
                     toi, player_stats = process_faceoff(event, compare_shift, away_players, home_players)
@@ -87,7 +79,7 @@ def curate_data(config):
                 elif event_details['event_name'] == 'takeaway': #504
                     toi, player_stats = process_takeaway(event, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'goal':  # 505
-                    toi, player_stats = process_goal(event, compare_shift, away_players, home_players, last_event, game_time_event)
+                    toi, player_stats = process_goal(event, compare_shift, away_players, home_players, away_players_sorted, home_players_sorted, last_event, game_time_event)
                 elif event_details['event_name'] == 'shot-on-goal': #506
                     toi, player_stats = process_shot_on_goal(event, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'missed-shot':
@@ -95,6 +87,11 @@ def curate_data(config):
                 elif event_details['event_name'] == 'blocked-shot':
                     toi, player_stats = process_blocked_shot(event, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'penalty':
+                    # print('\n')
+                    # print(f'i_shift: {i_shift}  i_event: {i_event}')
+                    # print(f'event: {event["period"]} {event["elapsed_time"]} {event["event_type"]} {event["event_code"]} ')
+                    # print(f'shift: {compare_shift["period"]} {compare_shift["elapsed_time"]} {shift_details["shift_name"]} {compare_shift["event_type"]} {shift_details["sport_stat"]}')
+                    # print('\n')
                     toi, player_stats = process_penalty(event, compare_shift, away_players_sorted, home_players_sorted, last_event, game_time_event)
                 elif event_details['event_name'] == 'stoppage':
                     toi, player_stats = process_stoppage(event, compare_shift, away_players, home_players, last_event, game_time_event)
@@ -106,25 +103,28 @@ def curate_data(config):
                 #    toi, player_stats = process_game_end(event, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'delayed-penalty':
                     toi, player_stats = process_delayed_penalty(event, compare_shift, away_players, home_players, last_event, game_time_event)
+                elif event_details['event_name'] == 'penalty-shot-missed':
+                    toi, player_stats = process_penalty_shot(event, compare_shift, away_players_sorted, home_players_sorted, last_event, game_time_event)
                 else:
                     cwc = 0
 
-                game_id.append(game[i_event]['game_id'])
-                game_date.append(data_games[i_game]['game_date'])
-                away_teams.append(away_team)
-                home_teams.append(home_team)
-                period_id.append(event['period'])
-                time_index.append(event['game_time'])
-                toi_list.append(toi)
-                event_id.append(i_event)
-                shift_id.append(i_shift)
-                away_empty_net.append(empty_net_data['away_empty_net'])
-                home_empty_net.append(empty_net_data['home_empty_net'])
-                away_skaters.append(empty_net_data['away_skaters'])
-                home_skaters.append(empty_net_data['home_skaters'])
-                player_data.append(player_stats)
-                last_event = copy.deepcopy(event)
+                if toi >=0 :
+                    game_id.append(game[i_event]['game_id'])
+                    game_date.append(data_games[i_game]['game_date'])
+                    away_teams.append(away_team)
+                    home_teams.append(home_team)
+                    period_id.append(event['period'])
+                    time_index.append(event['game_time'])
+                    toi_list.append(toi)
+                    event_id.append(i_event)
+                    shift_id.append(i_shift)
+                    away_empty_net.append(empty_net_data['away_empty_net'])
+                    home_empty_net.append(empty_net_data['home_empty_net'])
+                    away_skaters.append(empty_net_data['away_skaters'])
+                    home_skaters.append(empty_net_data['home_skaters'])
+                    player_data.append(player_stats)
 
+                last_event = copy.deepcopy(event)
                 i_shift += 1
 
         data = {
@@ -229,13 +229,21 @@ def curate_data(config):
             sum_list = [int(x) for x in sum_series]
             team_sums['home'][f'home_{attr}_sum'] = sum(sum_list)
 
+        if (team_sums['home']['home_goal_shootout_sum'] > 0) or (team_sums['away']['away_goal_shootout_sum'] > 0):
+            if team_sums['home']['home_goal_shootout_sum'] > team_sums['away']['away_goal_shootout_sum']:
+                team_sums['away']['away_goal_shootout_sum'] = 0
+                team_sums['home']['home_goal_shootout_sum'] = 1
+            elif team_sums['home']['home_goal_shootout_sum'] < team_sums['away']['away_goal_shootout_sum']:
+                team_sums['away']['away_goal_shootout_sum'] = 1
+                team_sums['home']['home_goal_shootout_sum'] = 0
+
         print(f'game_id: {game_id[0]}  toi: {df["time_on_ice"].sum()} {data_games[i_game]["playbyplay"]}')
         all_good = True
         reason = ''
-        if data_games[i_game]['away_goals'] != (team_sums['away']['away_goal_sum'] + team_sums['away']['away_goal_overtime_sum']):
+        if data_games[i_game]['away_goals'] != (team_sums['away']['away_goal_sum'] + team_sums['away']['away_goal_overtime_sum'] + team_sums['away']['away_goal_shootout_sum']):
             all_good = False
             reason = 'away_goals'
-        if data_games[i_game]['home_goals'] != (team_sums['home']['home_goal_sum'] + team_sums['home']['home_goal_overtime_sum']):
+        if data_games[i_game]['home_goals'] != (team_sums['home']['home_goal_sum'] + team_sums['home']['home_goal_overtime_sum'] + team_sums['home']['home_goal_shootout_sum']):
             all_good = False
             reason = 'home_goals'
         if data_games[i_game]['away_sog'] != (team_sums['away']['away_shot_on_goal_sum'] + team_sums['away']['away_shot_on_goal_overtime_sum']):
@@ -270,10 +278,10 @@ def curate_data(config):
             reason = 'home_giveaways'
         if data_games[i_game]['away_take'] != team_sums['away']['away_takeaways_sum']:
             all_good = False
-            reason = 'away_giveaways'
+            reason = 'away_takeaways'
         if data_games[i_game]['home_take'] != team_sums['home']['home_takeaways_sum']:
             all_good = False
-            reason = 'home_giveaways'
+            reason = 'home_takeaways'
 
 
         if not all_good:
@@ -285,7 +293,7 @@ def curate_data(config):
 
         print('\n')
         # Step 4: Export the DataFrame to CSV
-        df.to_csv(config.file_paths['game_output'] + f'{str(game_id[0])}.csv', na_rep='', index=False)
+        df.to_csv(config.file_paths['game_output_csv'] + f'{str(game_id[0])}.csv', na_rep='', index=False)
 
     # config = load_data()
     # curate_basic_stats(config, curr_date)
@@ -304,8 +312,6 @@ def curate_data(config):
     #     print(f"Player processing days: {days}")
     #     curate_rolling_player_stats(config, curr_date, first_days, days=days)
     #     curate_proj_player_data(config, curr_date, first_days, days=days)
-
-
 
 
 def process_empty_net(compare_shift):
@@ -432,7 +438,7 @@ def process_giveaway(event, compare_shift, away_players, home_players, last_even
     return toi, player_stats
 
 
-def process_goal(event, compare_shift, away_players, home_players, last_event, game_time_event):
+def process_goal(event, compare_shift, away_players, home_players, away_players_sorted, home_players_sorted, last_event, game_time_event):
     player_stats = []
     toi = calc_toi(game_time_event, last_event)
     period_code = 0
@@ -446,45 +452,79 @@ def process_goal(event, compare_shift, away_players, home_players, last_event, g
     assist_code = ['assist', 'assist_overtime', 'assist_shootout'][period_code]
     goal_against_code = ['goal_against', 'goal_against_overtime', 'goal_against_shootout'][period_code]
 
-    for away_player in compare_shift['away_players']:
-        player_id = away_players[int(away_player[0])]
-        away_player_stats = create_player_stats(player_id)
-        away_player_stats['toi'] += toi
-        if event['shot_attempt'] == player_id['player_id']:
-            away_player_stats[shot_attempt_code] += 1
-        if event['shot_on_goal'] == player_id['player_id']:
-            away_player_stats[shot_on_goal_code] += 1
-        if event['goal'] == player_id['player_id']:
-            away_player_stats[goal_code] += 1
-        if event['goal_assist1'] == player_id['player_id']:
-            away_player_stats[assist_code] += 1
-        if event['goal_assist2'] == player_id['player_id']:
-            away_player_stats[assist_code] += 1
-        if event['goal_against'] == player_id['player_id']:
-            away_player_stats[goal_against_code] += 1
+    if period_code < 2:
+        for away_player in compare_shift['away_players']:
+            player_id = away_players[int(away_player[0])]
+            away_player_stats = create_player_stats(player_id)
+            away_player_stats['toi'] += toi
+            if event['shot_attempt'] == player_id['player_id']:
+                away_player_stats[shot_attempt_code] += 1
+            if event['shot_on_goal'] == player_id['player_id']:
+                away_player_stats[shot_on_goal_code] += 1
+            if event['goal'] == player_id['player_id']:
+                away_player_stats[goal_code] += 1
+            if event['goal_assist1'] == player_id['player_id']:
+                away_player_stats[assist_code] += 1
+            if event['goal_assist2'] == player_id['player_id']:
+                away_player_stats[assist_code] += 1
+            if event['goal_against'] == player_id['player_id']:
+                away_player_stats[goal_against_code] += 1
 
-        player_stats.append(away_player_stats)
+            player_stats.append(away_player_stats)
 
-    for home_player in compare_shift['home_players']:
-        player_id = home_players[int(home_player[0])]
-        home_player_stats = create_player_stats(player_id)
-        home_player_stats['toi'] += toi
-        if event['shot_attempt'] == player_id['player_id']:
-            home_player_stats[shot_attempt_code] += 1
-        if event['shot_on_goal'] == player_id['player_id']:
-            home_player_stats[shot_on_goal_code] += 1
-        if event['goal'] == player_id['player_id']:
-            home_player_stats[goal_code] += 1
-        if event['goal_assist1'] == player_id['player_id']:
-            home_player_stats[assist_code] += 1
-        if event['goal_assist2'] == player_id['player_id']:
-            home_player_stats[assist_code] += 1
-        if event['goal_against'] == player_id['player_id']:
-            home_player_stats[goal_against_code] += 1
+        for home_player in compare_shift['home_players']:
+            player_id = home_players[int(home_player[0])]
+            home_player_stats = create_player_stats(player_id)
+            home_player_stats['toi'] += toi
+            if event['shot_attempt'] == player_id['player_id']:
+                home_player_stats[shot_attempt_code] += 1
+            if event['shot_on_goal'] == player_id['player_id']:
+                home_player_stats[shot_on_goal_code] += 1
+            if event['goal'] == player_id['player_id']:
+                home_player_stats[goal_code] += 1
+            if event['goal_assist1'] == player_id['player_id']:
+                home_player_stats[assist_code] += 1
+            if event['goal_assist2'] == player_id['player_id']:
+                home_player_stats[assist_code] += 1
+            if event['goal_against'] == player_id['player_id']:
+                home_player_stats[goal_against_code] += 1
 
-        player_stats.append(home_player_stats)
+            player_stats.append(home_player_stats)
 
-    return toi, player_stats
+        return toi, player_stats
+
+    else:
+        on_ice = [int(sweater[0]) for sweater in compare_shift['away_players']]
+        for player_id in away_players_sorted.keys():
+            player_data = away_players_sorted[player_id]
+            away_player_stats = create_player_stats(player_data)
+            if away_players_sorted[player_id]['player_sweater'] in on_ice:
+                away_player_stats['toi'] += toi
+            if event['shot_on_goal'] == player_id:
+                away_player_stats[shot_on_goal_code] += 1
+            if event['goal'] == player_id:
+                away_player_stats[goal_code] += 1
+            if event['goal_against'] == player_id:
+                away_player_stats[goal_against_code] += 1
+
+            player_stats.append(away_player_stats)
+
+        on_ice = [int(sweater[0]) for sweater in compare_shift['home_players']]
+        for player_id in home_players_sorted.keys():
+            player_data = home_players_sorted[player_id]
+            home_player_stats = create_player_stats(player_data)
+            if home_players_sorted[player_id]['player_sweater'] in on_ice:
+                home_player_stats['toi'] += toi
+            if event['shot_on_goal'] == player_id:
+                home_player_stats[shot_on_goal_code] += 1
+            if event['goal'] == player_id:
+                home_player_stats[goal_code] += 1
+            if event['goal_against'] == player_id:
+                home_player_stats[goal_against_code] += 1
+
+            player_stats.append(home_player_stats)
+
+        return toi, player_stats
 
 
 def process_shot_on_goal(event, compare_shift, away_players, home_players, last_event, game_time_event):
@@ -625,7 +665,7 @@ def process_penalty(event, compare_shift, away_players_sorted, home_players_sort
         home_player_stats = create_player_stats(player_data)
         if home_players_sorted[player_id]['player_sweater'] in on_ice:
             home_player_stats['toi'] += toi
-        if event['penalty_served'] == player_id['player_id']:
+        if event['penalty_served'] == player_id:
             home_player_stats[penalties_served_code] += 1
         if event['penalty_committed'] == player_id:
             home_player_stats[penalties_code] += 1
@@ -633,6 +673,46 @@ def process_penalty(event, compare_shift, away_players_sorted, home_players_sort
             home_player_stats[penalties_duration_code] += event['penalty_duration']
         if event['penalty_drawn'] == player_id:
             home_player_stats[penalties_drawn_code] += 1
+
+        player_stats.append(home_player_stats)
+
+    return toi, player_stats
+
+
+def process_penalty_shot(event, compare_shift, away_players_sorted, home_players_sorted, last_event, game_time_event):
+    player_stats = []
+    period_code = 0
+    if event['overtime']:
+        period_code = 1
+    elif event['shootout']:
+        period_code = 2
+    penalty_shot_code = ['penalty_shot', 'penalty_shot_overtime', 'penalty_shot_shootout'][period_code]
+    penalty_shot_goal_code = ['penalty_shot_goal', 'penalty_shot_goal_overtime', 'penalty_shot_goal_shootout'][period_code]
+    penalty_shot_saved_code = ['penalty_saved_goal', 'penalty_shot_saved_overtime', 'penalty_shot_saved_shootout'][period_code]
+
+    on_ice = [int(sweater[0]) for sweater in compare_shift['away_players']]
+    for player_id in away_players_sorted.keys():
+        player_data = away_players_sorted[player_id]
+        away_player_stats = create_player_stats(player_data)
+        if event['penalty_shot'] == player_id:
+            away_player_stats[penalty_shot_code] += 1
+        if event['penalty_shot_goal'] == player_id:
+            away_player_stats[penalty_shot_goal_code] += 1
+        if event['penalty_shot_saved'] == player_id:
+            away_player_stats[penalty_shot_saved_code] += 1
+
+        player_stats.append(away_player_stats)
+
+    on_ice = [int(sweater[0]) for sweater in compare_shift['home_players']]
+    for player_id in home_players_sorted.keys():
+        player_data = home_players_sorted[player_id]
+        home_player_stats = create_player_stats(player_data)
+        if event['penalty_shot'] == player_id:
+            home_player_stats[penalty_shot_code] += 1
+        if event['penalty_shot_goal'] == player_id:
+            home_player_stats[penalty_shot_goal_code] += 1
+        if event['penalty_shot_saved'] == player_id:
+            home_player_stats[penalty_shot_saved_code] += 1
 
         player_stats.append(home_player_stats)
 
@@ -788,6 +868,8 @@ def process_delayed_penalty(event, compare_shift, away_players, home_players, la
 
 
 def calc_toi(game_time_event, last_event):
+    if last_event is None:
+        return -1
     last_game_time_event = period_time_to_game_time(last_event['period'], last_event['game_time'])
     toi = game_time_event - last_game_time_event
     return toi

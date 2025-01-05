@@ -455,6 +455,10 @@ def process_plays(data):
         shift['penalty_drawn'] = None
         shift['penalty_duration'] = None
         shift['delayed_penalty'] = None
+        shift['penalty_match'] = None
+        shift['penalty_shot'] = None
+        shift['penalty_shot_goal'] = None
+        shift['penalty_shot_saved'] = None
         shift['period_end'] = None
         shift['game_end'] = None
         if play.get('typeCode') == 502:
@@ -482,10 +486,15 @@ def process_plays(data):
             shift['blocked_shot_attempt'] = play['details'].get('shootingPlayerId', None)
             shift['blocked_shot_saved'] = play['details'].get('blockingPlayerId', None)
         elif play.get('typeCode') == 509:
-            shift['penalty_duration'] = play['details'].get('duration', None)
+            if play['details'].get('duration', None) is not None:
+                if play['details'].get('typeCode', None) == 'MAT':
+                    shift['penalty_duration'] = play['details'].get('duration', None) - 10
+                else:
+                    shift['penalty_duration'] = play['details'].get('duration', None)
             if play['details'].get('committedByPlayerId', None) is not None:
                 shift['penalty_committed'] = play['details'].get('committedByPlayerId', None)
                 shift['penalty_drawn'] = play['details'].get('drawnByPlayerId', None)
+                shift['penalty_served']= play['details'].get('servedByPlayerId', None)
             elif play['details'].get('servedByPlayerId', None) is not None:
                 shift['penalty_served'] = play['details'].get('servedByPlayerId', None)
         elif play.get('typeCode') == 510:
@@ -515,8 +524,11 @@ def process_plays(data):
             shift['takeaway'] = play['details'].get('playerId', None)
         elif play.get('typeCode') == 535: # delayed-penalty
             shift['delayed_penalty'] = 1
+        elif play.get('typeCode') == 537: # penalty-shot-missed
+            shift['penalty_shot'] = play['details'].get('shootingPlayerId', None)
+            shift['penalty_shot_saved'] = play['details'].get('goalieInNetId', None)
         else:
-                cwc = 0
+            cwc = 0
 
         plays.append(shift)
 

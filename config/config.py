@@ -12,8 +12,8 @@ from datetime import datetime
 class Config:
     def __init__(self, input_dict):
         self.verbose = input_dict['verbose']
-        #  self.curr_date = datetime.now().date()
-        self.curr_date = datetime(2024, 10, 30).date()
+        self.curr_date = datetime.now().date()
+        # self.curr_date = datetime(2024, 10, 23).date()
         self.base_url = "https://api-web.nhle.com"
         self.base_url_lines = "https://www.dailyfaceoff.com"
         self.headers_lines = {
@@ -42,7 +42,8 @@ class Config:
             "all_shifts": os.path.join(self.current_path, "storage", "pickles", "all_shifts.pkl"),
             "all_plays": os.path.join(self.current_path, "storage", "pickles", "all_plays.pkl"),
             "all_game_rosters": os.path.join(self.current_path, "storage", "pickles", "all_game_rosters.pkl"),
-            "game_output": os.path.join(self.current_path, "storage", "output", "game_output"),
+            "game_output_csv": os.path.join(self.current_path, "storage", "output", "csv", "game_output"),
+            "game_output_pkl": os.path.join(self.current_path, "storage", "output", "pkl", "game_output"),
         }
 
         self.days_list = input_dict.get("days_list", None)
@@ -260,4 +261,9 @@ class Config:
             'event_name': 'delayed-penalty',
             'sport_stat': True,
         }
+        event_categ[537] = {
+            'event_name': 'penalty-shot-missed',
+            'sport_stat': True,
+        }
         return event_categ
+
