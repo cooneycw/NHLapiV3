@@ -1,4 +1,4 @@
-from src_code.utils.utils import period_time_to_game_time, game_time_to_period_time, create_player_dict, create_roster_dicts, create_ordered_roster, create_player_stats
+from src_code.utils.utils import period_time_to_game_time, create_player_dict, create_roster_dicts, create_ordered_roster, create_player_stats
 import copy
 import pandas as pd
 
@@ -22,10 +22,10 @@ def curate_data(config):
     event_categ = config.event_categ
     shift_categ = config.shift_categ
     for i_game, game in enumerate(data_plays):
-    #     if data_games[i_game]['id'] !=  2024020218:
-    #         continue
-    #     else:
-    #         cwc = 0
+        # if data_games[i_game]['id'] !=  2024020114:
+        #     continue
+        # else:
+        #     cwc = 0
         i_shift = 0
         game_id = []
         game_date = []
@@ -92,7 +92,7 @@ def curate_data(config):
                     # print(f'event: {event["period"]} {event["elapsed_time"]} {event["event_type"]} {event["event_code"]} ')
                     # print(f'shift: {compare_shift["period"]} {compare_shift["elapsed_time"]} {shift_details["shift_name"]} {compare_shift["event_type"]} {shift_details["sport_stat"]}')
                     # print('\n')
-                    toi, player_stats = process_penalty(event, compare_shift, away_players_sorted, home_players_sorted, last_event, game_time_event)
+                    toi, player_stats = process_penalty(config.verbose, event, compare_shift, away_players_sorted, home_players_sorted, last_event, game_time_event)
                 elif event_details['event_name'] == 'stoppage':
                     toi, player_stats = process_stoppage(event, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'period-end':
@@ -287,7 +287,8 @@ def curate_data(config):
         if not all_good:
             print(f'reason: {reason}')
             print(f'shift data: {team_sums["away"]}  {team_sums["home"]}')
-            print(f'boxscore data: away_goals {data_games[i_game]["away_goals"]} away_sog {data_games[i_game]["away_sog"]}  home_goals {data_games[i_game]["home_goals"]} home_sog {data_games[i_game]["home_sog"]}')
+            print(f'away_goals {data_games[i_game]["away_goals"]} away_sog {data_games[i_game]["away_sog"]} away_pim {data_games[i_game]["away_pim"]} away_takeaways {data_games[i_game]["away_take"]} away_giveaways {data_games[i_game]["away_give"]}')
+            print(f'home_goals {data_games[i_game]["home_goals"]} home_sog {data_games[i_game]["home_sog"]} home_pim {data_games[i_game]["home_pim"]} home_takeaways {data_games[i_game]["home_take"]} home_giveaways {data_games[i_game]["home_give"]}')
         else:
             print(f'game totals confirmed')
 
@@ -312,6 +313,7 @@ def curate_data(config):
     #     print(f"Player processing days: {days}")
     #     curate_rolling_player_stats(config, curr_date, first_days, days=days)
     #     curate_proj_player_data(config, curr_date, first_days, days=days)
+
 
 
 def process_empty_net(compare_shift):
@@ -629,7 +631,7 @@ def process_blocked_shot(event, compare_shift, away_players, home_players, last_
     return toi, player_stats
 
 
-def process_penalty(event, compare_shift, away_players_sorted, home_players_sorted, last_event, game_time_event):
+def process_penalty(verbose, event, compare_shift, away_players_sorted, home_players_sorted, last_event, game_time_event):
     player_stats = []
     toi = calc_toi(game_time_event, last_event)
     period_code = 0
@@ -652,8 +654,16 @@ def process_penalty(event, compare_shift, away_players_sorted, home_players_sort
             away_player_stats[penalties_served_code] += 1
         if event['penalty_committed'] == player_id:
             away_player_stats[penalties_code] += 1
-        if (event['penalty_committed'] == player_id) or (event['penalty_served'] == player_id):
-            away_player_stats[penalties_duration_code] += event['penalty_duration']
+        if event['penalty_committed'] is None:
+            if event['penalty_served'] == player_id:
+                away_player_stats[penalties_duration_code] += event['penalty_duration']
+                if verbose:
+                    print(f'away: adding {event["penalty_duration"]} minutes for {player_data["player_lname"]}')
+        else:
+            if event['penalty_committed'] == player_id:
+                away_player_stats[penalties_duration_code] += event['penalty_duration']
+                if verbose:
+                    print(f'away: adding {event["penalty_duration"]} minutes for {player_data["player_lname"]}')
         if event['penalty_drawn'] == player_id:
             away_player_stats[penalties_drawn_code] += 1
 
@@ -669,8 +679,16 @@ def process_penalty(event, compare_shift, away_players_sorted, home_players_sort
             home_player_stats[penalties_served_code] += 1
         if event['penalty_committed'] == player_id:
             home_player_stats[penalties_code] += 1
-        if (event['penalty_committed'] == player_id) or (event['penalty_served'] == player_id):
-            home_player_stats[penalties_duration_code] += event['penalty_duration']
+        if event['penalty_committed'] is None:
+            if event['penalty_served'] == player_id:
+                home_player_stats[penalties_duration_code] += event['penalty_duration']
+                if verbose:
+                    print(f'home: adding {event["penalty_duration"]} minutes for {player_data["player_lname"]}')
+        else:
+            if event['penalty_committed'] == player_id:
+                home_player_stats[penalties_duration_code] += event['penalty_duration']
+                if verbose:
+                    print(f'home: adding {event["penalty_duration"]} minutes for {player_data["player_lname"]}')
         if event['penalty_drawn'] == player_id:
             home_player_stats[penalties_drawn_code] += 1
 
@@ -682,6 +700,7 @@ def process_penalty(event, compare_shift, away_players_sorted, home_players_sort
 def process_penalty_shot(event, compare_shift, away_players_sorted, home_players_sorted, last_event, game_time_event):
     player_stats = []
     period_code = 0
+    toi = 0
     if event['overtime']:
         period_code = 1
     elif event['shootout']:

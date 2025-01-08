@@ -4,7 +4,7 @@ from src_code.curate.curate_01 import curate_data
 
 def main():
     config_dict = {
-        "verbose": True,
+        "verbose": False,
         "season_count": 1,
         "delete_pickles": True,
         "reload_seasons": True,
