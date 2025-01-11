@@ -1,6 +1,7 @@
 from config.config import Config
 from src_code.collect.collect_01 import get_season_data, get_team_list, get_game_list, get_boxscore_list, get_playbyplay_data, get_player_names
 from src_code.curate.curate_01 import curate_data
+from src_code.model.model_01 import model_data
 
 def main():
     config_dict = {
@@ -16,8 +17,9 @@ def main():
         "reload_rosters": True,
     }
     config = Config(config_dict)
-    get_data(config)
-    curate_data(config)
+    # get_data(config)
+    # curate_data(config)
+    model_data(config)
 
 
 def get_data(config):

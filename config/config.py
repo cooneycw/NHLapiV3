@@ -13,7 +13,7 @@ class Config:
     def __init__(self, input_dict):
         self.verbose = input_dict['verbose']
         self.curr_date = datetime.now().date()
-        #  self.curr_date = datetime(2024, 10, 30).date()
+        #  self.curr_date = datetime(2024, 11, 14).date()
         self.base_url = "https://api-web.nhle.com"
         self.base_url_lines = "https://www.dailyfaceoff.com"
         self.headers_lines = {
@@ -266,3 +266,4 @@ class Config:
             'sport_stat': True,
         }
         return event_categ
+

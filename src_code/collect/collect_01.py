@@ -86,6 +86,9 @@ def get_game_list(config):
                 for game in data["games"]:
                     if game["gameType"] != 2:
                         continue
+                    if game['gameDate'] == '2025-01-08':  # postponed game due to wildfires
+                        if game['awayTeam']['abbrev'] == 'CGY':
+                            continue
                     game_date = datetime.strptime(game["gameDate"], "%Y-%m-%d")
                     home_team = game["homeTeam"]['abbrev']
                     away_team = game["awayTeam"]['abbrev']
@@ -536,8 +539,7 @@ def process_plays(data):
 
 
 def get_player_names(config):
-    if config.verbose:
-        print(f'Gathering player names...')
+    print(f'Gathering player names...')
     dimension = "all_names"
     prior_data = config.load_data(dimension)
     if prior_data and config.reload_playernames is False:
@@ -551,7 +553,9 @@ def get_player_names(config):
             # update player names
     if (prior_data is None) or (config.reload_playernames is True):
         save_data = []
-        for player_id in config.Player.get_players():
+        for i, player_id in enumerate(config.Player.get_players()):
+            if i % 100 == 0:
+                print(f'{i} players gathered..')
             final_url = config.get_endpoint("player", player_id=player_id)
             response = requests.get(final_url)
             response.raise_for_status()  # Ensure the response is OK

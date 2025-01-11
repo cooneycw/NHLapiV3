@@ -1,6 +1,14 @@
 import pickle
 
 
+def save_game_data(obj, filename):
+    pickle.dump(obj, open(filename, "wb"), pickle.HIGHEST_PROTOCOL)
+
+
+def load_game_data(filename):
+    return pickle.load(open(filename, "rb"))
+
+
 def save_data(obj):
     with open('storage/config.pkl', 'wb') as outp:  # Use 'wb' to write in binary mode
         pickle.dump(obj, outp, pickle.HIGHEST_PROTOCOL)

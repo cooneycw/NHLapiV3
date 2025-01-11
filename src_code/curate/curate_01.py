@@ -1,4 +1,4 @@
-from src_code.utils.utils import period_time_to_game_time, create_player_dict, create_roster_dicts, create_ordered_roster, create_player_stats
+from src_code.utils.utils import period_time_to_game_time, create_player_dict, create_roster_dicts, create_ordered_roster, create_player_stats, save_game_data
 import copy
 import pandas as pd
 
@@ -22,7 +22,7 @@ def curate_data(config):
     event_categ = config.event_categ
     shift_categ = config.shift_categ
     for i_game, game in enumerate(data_plays):
-        # if data_games[i_game]['id'] !=  2024020114:
+        # if data_games[i_game]['id'] !=  2024020218:
         #     continue
         # else:
         #     cwc = 0
@@ -66,6 +66,13 @@ def curate_data(config):
                     continue
                 break
 
+            if config.verbose:
+                print('\n')
+                print(f'i_shift: {i_shift}  i_event: {i_event}')
+                print(f'event: {event["period"]} {event["elapsed_time"]} {event["event_type"]} {event["event_code"]} ')
+                print(f'shift: {compare_shift["period"]} {compare_shift["elapsed_time"]} {shift_details["shift_name"]} {compare_shift["event_type"]} {shift_details["sport_stat"]}')
+                print('\n')
+
             game_time_shift = period_time_to_game_time(int(compare_shift['period']), compare_shift['game_time'])
             if ((event_details['event_name'] == shift_details['shift_name']) and (game_time_event == game_time_shift) or
                 (event_details['event_name'] == 'penalty-shot') and (game_time_event == game_time_shift)):
@@ -81,17 +88,12 @@ def curate_data(config):
                 elif event_details['event_name'] == 'goal':  # 505
                     toi, player_stats = process_goal(event, compare_shift, away_players, home_players, away_players_sorted, home_players_sorted, last_event, game_time_event)
                 elif event_details['event_name'] == 'shot-on-goal': #506
-                    toi, player_stats = process_shot_on_goal(event, compare_shift, away_players, home_players, last_event, game_time_event)
+                    toi, player_stats = process_shot_on_goal(config.verbose, event, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'missed-shot':
                     toi, player_stats = process_missed_shot(event, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'blocked-shot':
                     toi, player_stats = process_blocked_shot(event, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'penalty':
-                    # print('\n')
-                    # print(f'i_shift: {i_shift}  i_event: {i_event}')
-                    # print(f'event: {event["period"]} {event["elapsed_time"]} {event["event_type"]} {event["event_code"]} ')
-                    # print(f'shift: {compare_shift["period"]} {compare_shift["elapsed_time"]} {shift_details["shift_name"]} {compare_shift["event_type"]} {shift_details["sport_stat"]}')
-                    # print('\n')
                     toi, player_stats = process_penalty(config.verbose, event, compare_shift, away_players_sorted, home_players_sorted, last_event, game_time_event)
                 elif event_details['event_name'] == 'stoppage':
                     toi, player_stats = process_stoppage(event, compare_shift, away_players, home_players, last_event, game_time_event)
@@ -142,6 +144,8 @@ def curate_data(config):
             'away_skaters': away_skaters,
             'home_skaters': home_skaters
         }
+
+        save_game_data(data, config.file_paths["game_output_pkl"] + f'{str(game_id[0])}')
 
         # Step 4: Convert the dictionary to a pandas DataFrame
         df = pd.DataFrame(data)
@@ -294,6 +298,7 @@ def curate_data(config):
 
         print('\n')
         # Step 4: Export the DataFrame to CSV
+
         df.to_csv(config.file_paths['game_output_csv'] + f'{str(game_id[0])}.csv', na_rep='', index=False)
 
     # config = load_data()
@@ -529,7 +534,7 @@ def process_goal(event, compare_shift, away_players, home_players, away_players_
         return toi, player_stats
 
 
-def process_shot_on_goal(event, compare_shift, away_players, home_players, last_event, game_time_event):
+def process_shot_on_goal(verbose, event, compare_shift, away_players, home_players, last_event, game_time_event):
     player_stats = []
     toi = calc_toi(game_time_event, last_event)
     period_code = 0
@@ -548,6 +553,8 @@ def process_shot_on_goal(event, compare_shift, away_players, home_players, last_
         if event['shot_attempt'] == player_id['player_id']:
             away_player_stats[shot_attempt_code] += 1
         if event['shot_on_goal'] == player_id['player_id']:
+            if verbose:
+                print(f'away: adding shot for {player_id["player_lname"]}')
             away_player_stats[shot_on_goal_code] += 1
         if event['shot_saved'] == player_id['player_id']:
             away_player_stats[shot_saved_code] += 1
@@ -560,6 +567,8 @@ def process_shot_on_goal(event, compare_shift, away_players, home_players, last_
         if event['shot_attempt'] == player_id['player_id']:
             home_player_stats[shot_attempt_code] += 1
         if event['shot_on_goal'] == player_id['player_id']:
+            if verbose:
+                print(f'home: adding shot for {player_id["player_lname"]}')
             home_player_stats[shot_on_goal_code] += 1
         if event['shot_saved'] == player_id['player_id']:
             home_player_stats[shot_saved_code] += 1
