@@ -142,11 +142,13 @@ def curate_data(config):
             'away_empty_net': away_empty_net,
             'home_empty_net': home_empty_net,
             'away_skaters': away_skaters,
-            'home_skaters': home_skaters
+            'home_skaters': home_skaters,
+            'player_data': player_data,
         }
 
         save_game_data(data, config.file_paths["game_output_pkl"] + f'{str(game_id[0])}')
 
+        del data['player_data']
         # Step 4: Convert the dictionary to a pandas DataFrame
         df = pd.DataFrame(data)
 

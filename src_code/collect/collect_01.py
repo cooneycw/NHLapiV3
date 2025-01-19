@@ -349,8 +349,10 @@ def process_shifts(config, soup):
                     sweater_number, position = split_data(tds[away_player].get_text(strip=True))
                     away_players.append((sweater_number, position))
                 shift['away_players'] = away_players
-
-                home_tds_ind = max(away_player_list) + 3
+                if not away_player_list:
+                    home_tds_ind = 3
+                else:
+                    home_tds_ind = max(away_player_list) + 3
                 num_home_players = len(tds[home_tds_ind].find_all('table')) - 1
                 home_players = []
                 home_player_list = [home_tds_ind + 1 + (4 * x) for x in range(0, num_home_players)]
