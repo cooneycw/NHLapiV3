@@ -1,5 +1,6 @@
 from src_code.utils.utils import load_game_data, create_player_dict
-from src_code.utils.graph_utils import create_graph, show_single_game_trimmed, add_team_node, add_player_node, add_game, add_player_game_performance
+from src_code.utils.graph_utils import create_graph, show_single_game_trimmed, add_team_node, add_player_node, add_game, add_player_game_performance, update_tgp_stats
+import copy
 import networkx as nx
 
 
@@ -34,21 +35,24 @@ def model_data(config):
     for k, game in enumerate(data_games):
         add_game(data_graph, game)
 
+    team_game_maps = []
     for l, roster in enumerate(data_game_roster):
-        add_player_game_performance(data_graph, roster)
+        team_game_map = add_player_game_performance(data_graph, roster)
+        team_game_maps.append(team_game_map)
 
     print(data_graph)
     shifts = []
 
     for m, game in enumerate(data_games):
-        # show_single_game_trimmed(target_graph, game['id'])
+        # show_single_game_trimmed(data_graph, game['id'])
         shift_data = load_game_data(config.file_paths["game_output_pkl"] + f'{str(game["id"])}')
-        process_shift_data(data_graph, shift_data)
+        process_shift_data(data_graph, team_game_maps[m], shift_data)
         shifts.append(shift_data)
     cwc = 0
 
 
-def process_shift_data(data_graph, shift_data):
+def process_shift_data(data_graph, team_game_map, shift_data):
+    # called on a per-game basis
     game_id = shift_data["game_id"]
     game_date = shift_data["game_date"]
     away_team = shift_data["away_teams"]
@@ -64,6 +68,19 @@ def process_shift_data(data_graph, shift_data):
     home_skaters = shift_data["home_skaters"]
     player_data = shift_data["player_data"]
 
-    for i, shift in shift_id:
-        cwc = 0
+    for i, shift in enumerate(shift_id):
+        # one per shift
+        line_player_team_map = {}
+        for player_dat in player_data[i]:
+            game_team = (game_id[i], player_dat['player_team'])
+            if game_team not in line_player_team_map:
+                line_player_team_map[game_team] = []
+            line_player_team_map[game_team].append(player_dat['player_id'])
+
+        for team in line_player_team_map:
+            for player in line_player_team_map[team]:
+                other_players = copy.deepcopy(line_player_team_map[team])
+                other_players.remove(player)
+                cwc = 0
+
 

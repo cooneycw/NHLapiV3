@@ -18,10 +18,30 @@ def add_team_node(graph, team):
 
 
 def add_player_node(graph, player, player_dict):
-    graph.add_node(player, type = 'player', **player_dict[player])
+    player_dict_details = player_dict[player]
+    player_dict_details['time_on_ice'] = [0, 0, 0]
+    player_dict_details['shots'] = [0, 0, 0]
+    player_dict_details['shot_attempts'] = [0, 0, 0]
+    player_dict_details['saves'] = [0, 0, 0]
+    player_dict_details['goals'] = [0, 0, 0]
+    player_dict_details['hits'] = [0, 0, 0]
+    player_dict_details['pim'] = [0, 0, 0]
+
+    graph.add_node(player, type = 'player', **player_dict_details)
 
 
 def add_game(graph, game):
+    default_stats = {
+        'wins': [0, 0, 0],
+        'losses': [0, 0, 0],
+        'time_on_ice': [0, 0, 0],
+        'shot_attempts': [0, 0, 0],
+        'shots': [0, 0, 0],
+        'saves': [0, 0, 0],
+        'goals': [0, 0, 0],
+        'hits': [0, 0, 0],
+        'pim': [0, 0, 0],
+    }
     game_id = game['id']
     game_date = game['game_date']
     graph.add_node(game_id, type = 'game', game_date=game_date)
@@ -29,8 +49,8 @@ def add_game(graph, game):
     graph.add_edge(game['homeTeam'], game_id, home=1)
     away_tgp = str(game_id) + '_' + game['awayTeam']
     home_tgp = str(game_id) + '_' +game['homeTeam']
-    graph.add_node(away_tgp, type = 'team_game_performance')
-    graph.add_node(home_tgp, type = 'team_game_performance')
+    graph.add_node(away_tgp, type = 'team_game_performance', **default_stats)
+    graph.add_node(home_tgp, type = 'team_game_performance', **default_stats)
     graph.add_edge(away_tgp, game['awayTeam'])
     graph.add_edge(home_tgp, game['homeTeam'])
     graph.add_edge(away_tgp, game_id)
@@ -38,15 +58,73 @@ def add_game(graph, game):
 
 
 def add_player_game_performance(graph, roster):
+    default_stats = {
+        'time_on_ice': [0, 0, 0],
+        'shots': [0, 0, 0],
+        'saves': [0, 0, 0],
+        'goals': [0, 0, 0],
+        'assists': [0, 0, 0],
+        'points': [0, 0, 0],
+        'pim': [0, 0, 0],
+    }
+
+    team_game_map = {}
+
     for player in roster:
         game_id = player['game_id']
         player_id = player['player_id']
         player_team = player['player_team']
+        player_position = player['player_position']
         player_pgp = str(game_id) + '_' + str(player_id)
         team_tgp = str(game_id) + '_' + player_team
-        graph.add_node(player_pgp, type = 'player_game_performance')
-        graph.add_edge(player_pgp, player_id)
+        graph.add_node(player_pgp, type = 'player_game_performance', player_position=player_position, **default_stats)
         graph.add_edge(player_pgp, team_tgp)
+        graph.add_edge(player_pgp, player_id, **default_stats)
+
+        team_key = (game_id, player_team)
+        if team_key not in team_game_map:
+            team_game_map[team_key] = []
+        team_game_map[team_key].append(player_pgp)
+
+    # Add edges between players on the same team
+    for team_key, player_pgps in team_game_map.items():
+        for i in range(len(player_pgps)):
+            for j in range(i + 1, len(player_pgps)):
+                graph.add_edge(player_pgps[i], player_pgps[j], **default_stats)
+
+    return team_game_map
+
+
+def update_tgp_stats(graph, player_team, game_id, stat_dict):
+    """Update stats for a Team Game Performance node."""
+    team_tgp = str(game_id) + '_' + player_team
+    tgp_node = graph.nodes[team_tgp]
+    cwc = 0
+
+def update_pgp_stats(graph, player_id, game_id, stat_dict):
+    """Update stats for a Player Game Performance node."""
+    player_pgp = str(game_id) + '_' + str(player_id)
+    pgp_node = graph.nodes[player_pgp]
+    cwc = 0
+
+def create_pgp_edges(graph, team_tgp):
+    """
+    Create edges between PGP nodes of players on the same team
+    with their aggregate stats.
+    """
+    pgp_nodes = [node for node in graph.neighbors(team_tgp)
+                 if graph.nodes[node]['type'] == 'player_game_performance']
+
+    for i, pgp1 in enumerate(pgp_nodes):
+        for pgp2 in pgp_nodes[i+1:]:
+            # Aggregate stats for the edge
+            stats1 = graph.nodes[pgp1].get('stats', {})
+            stats2 = graph.nodes[pgp2].get('stats', {})
+            aggregate_stats = {stat: stats1.get(stat, 0) + stats2.get(stat, 0)
+                               for stat in set(stats1) | set(stats2)}
+
+            # Add edge with aggregate stats
+            graph.add_edge(pgp1, pgp2, stats=aggregate_stats)
 
 
 def show_single_game_trimmed(graph, game_id):
