@@ -33,6 +33,7 @@ def curate_data(config):
         away_teams = []
         home_teams = []
         period_id = []
+        period_code = []
         time_index = []
         toi_list = []
         event_id = []
@@ -75,41 +76,41 @@ def curate_data(config):
                 print('\n')
 
             game_time_shift = period_time_to_game_time(int(compare_shift['period']), compare_shift['game_time'])
-            period_code = 0
+            period_cd = 0
             if event['overtime']:
-                period_code = 1
+                period_cd = 1
             elif event['shootout']:
-                period_code = 2
+                period_cd = 2
 
             if ((event_details['event_name'] == shift_details['shift_name']) and (game_time_event == game_time_shift) or
                 (event_details['event_name'] == 'penalty-shot') and (game_time_event == game_time_shift)):
                 empty_net_data = process_empty_net(compare_shift)
                 if event_details['event_name'] == 'faceoff':
-                    toi, player_stats = process_faceoff(event, period_code, compare_shift, away_players, home_players)
+                    toi, player_stats = process_faceoff(event, period_cd, compare_shift, away_players, home_players)
                 elif event_details['event_name'] == 'hit':  #503
-                    toi, player_stats = process_hit(event, period_code, compare_shift, away_players, home_players, last_event, game_time_event)
+                    toi, player_stats = process_hit(event, period_cd, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'giveaway': #504
-                    toi, player_stats = process_giveaway(event, period_code, compare_shift, away_players, home_players, last_event, game_time_event)
+                    toi, player_stats = process_giveaway(event, period_cd, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'takeaway': #504
-                    toi, player_stats = process_takeaway(event, period_code, compare_shift, away_players, home_players, last_event, game_time_event)
+                    toi, player_stats = process_takeaway(event, period_cd, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'goal':  # 505
-                    toi, player_stats = process_goal(event, period_code, compare_shift, away_players, home_players, away_players_sorted, home_players_sorted, last_event, game_time_event)
+                    toi, player_stats = process_goal(event, period_cd, compare_shift, away_players, home_players, away_players_sorted, home_players_sorted, last_event, game_time_event)
                 elif event_details['event_name'] == 'shot-on-goal': #506
-                    toi, player_stats = process_shot_on_goal(config.verbose, event, period_code, compare_shift, away_players, home_players, last_event, game_time_event)
+                    toi, player_stats = process_shot_on_goal(config.verbose, event, period_cd, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'missed-shot':
-                    toi, player_stats = process_missed_shot(event, period_code, compare_shift, away_players, home_players, last_event, game_time_event)
+                    toi, player_stats = process_missed_shot(event, period_cd, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'blocked-shot':
-                    toi, player_stats = process_blocked_shot(event, period_code, compare_shift, away_players, home_players, last_event, game_time_event)
+                    toi, player_stats = process_blocked_shot(event, period_cd, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'penalty':
-                    toi, player_stats = process_penalty(config.verbose, event, period_code, compare_shift, away_players_sorted, home_players_sorted, last_event, game_time_event)
+                    toi, player_stats = process_penalty(config.verbose, event, period_cd, compare_shift, away_players_sorted, home_players_sorted, last_event, game_time_event)
                 elif event_details['event_name'] == 'stoppage':
-                    toi, player_stats = process_stoppage(event, period_code, compare_shift, away_players, home_players, last_event, game_time_event)
+                    toi, player_stats = process_stoppage(event, period_cd, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'period-end':
-                    toi, player_stats = process_period_end(event, period_code, compare_shift, away_players, home_players, last_event, game_time_event)
+                    toi, player_stats = process_period_end(event, period_cd, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'delayed-penalty':
-                    toi, player_stats = process_delayed_penalty(event, period_code, compare_shift, away_players, home_players, last_event, game_time_event)
+                    toi, player_stats = process_delayed_penalty(event, period_cd, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'penalty-shot-missed':
-                    toi, player_stats = process_penalty_shot(event, period_code, compare_shift, away_players_sorted, home_players_sorted, last_event, game_time_event)
+                    toi, player_stats = process_penalty_shot(event, period_cd, compare_shift, away_players_sorted, home_players_sorted, last_event, game_time_event)
                 else:
                     cwc = 0
 
@@ -119,6 +120,7 @@ def curate_data(config):
                     away_teams.append(away_team)
                     home_teams.append(home_team)
                     period_id.append(event['period'])
+                    period_code.append(period_cd)
                     time_index.append(event['game_time'])
                     toi_list.append(toi)
                     event_id.append(i_event)
@@ -350,7 +352,6 @@ def curate_data(config):
     #     print(f"Player processing days: {days}")
     #     curate_rolling_player_stats(config, curr_date, first_days, days=days)
     #     curate_proj_player_data(config, curr_date, first_days, days=days)
-
 
 
 def process_empty_net(compare_shift):

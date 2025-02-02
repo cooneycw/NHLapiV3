@@ -32,15 +32,18 @@ def add_player_node(graph, player, player_dict):
 
 def add_game(graph, game):
     default_stats = {
-        'wins': [0, 0, 0],
-        'losses': [0, 0, 0],
-        'time_on_ice': [0, 0, 0],
-        'shot_attempts': [0, 0, 0],
-        'shots': [0, 0, 0],
-        'saves': [0, 0, 0],
-        'goals': [0, 0, 0],
-        'hits': [0, 0, 0],
-        'pim': [0, 0, 0],
+        'win': [0, 0, 0],
+        'loss': [0, 0, 0],
+        'toi': [0, 0, 0],
+        'faceoff_taken': [0, 0, 0],
+        'faceoff_won': [0, 0, 0],
+        'shot_attempt': [0, 0, 0],
+        'shot_on_goal': [0, 0, 0],
+        'shot_saved': [0, 0, 0],
+        'goal': [0, 0, 0],
+        'hit_another_player': [0, 0, 0],
+        'hit_by_player': [0, 0, 0],
+        'penalties_duration': [0, 0, 0],
     }
     game_id = game['id']
     game_date = game['game_date']
@@ -59,13 +62,17 @@ def add_game(graph, game):
 
 def add_player_game_performance(graph, roster):
     default_stats = {
-        'time_on_ice': [0, 0, 0],
-        'shots': [0, 0, 0],
-        'saves': [0, 0, 0],
-        'goals': [0, 0, 0],
-        'assists': [0, 0, 0],
-        'points': [0, 0, 0],
-        'pim': [0, 0, 0],
+        'toi': [0, 0, 0],
+        'faceoff_taken': [0, 0, 0],
+        'faceoff_won': [0, 0, 0],
+        'shot_on_goal': [0, 0, 0],
+        'shot_saved': [0, 0, 0],
+        'goal': [0, 0, 0],
+        'assist': [0, 0, 0],
+        'point': [0, 0, 0],
+        'hit_another_player': [0, 0, 0],
+        'hit_by_player': [0, 0, 0],
+        'penalties_duration': [0, 0, 0],
     }
 
     team_game_map = {}
@@ -95,16 +102,37 @@ def add_player_game_performance(graph, roster):
     return team_game_map
 
 
-def update_tgp_stats(graph, player_team, game_id, stat_dict):
+def update_tgp_stats(graph, team_tgp, period_code, stat_dict):
     """Update stats for a Team Game Performance node."""
-    team_tgp = str(game_id) + '_' + player_team
     tgp_node = graph.nodes[team_tgp]
+    tgp_node['faceoff_taken'][period_code] += stat_dict['faceoff_taken'][period_code]
+    tgp_node['faceoff_won'][period_code] += stat_dict['faceoff_won'][period_code]
+    tgp_node['shot_on_goal'][period_code] += stat_dict['shot_on_goal'][period_code]
+    tgp_node['shot_saved'][period_code] += stat_dict['shot_saved'][period_code]
+    tgp_node['goal'][period_code] += stat_dict['goal'][period_code]
+    tgp_node['hit_another_player'][period_code] += stat_dict['hit_another_player'][period_code]
+    tgp_node['hit_by_player'][period_code] += stat_dict['hit_by_player'][period_code]
+    tgp_node['penalties_duration'][period_code] += stat_dict['penalties_duration'][period_code]
+
     cwc = 0
 
-def update_pgp_stats(graph, player_id, game_id, stat_dict):
+
+def update_pgp_stats(graph, player_pgp, period_code, stat_dict):
     """Update stats for a Player Game Performance node."""
-    player_pgp = str(game_id) + '_' + str(player_id)
     pgp_node = graph.nodes[player_pgp]
+    pgp_node['toi'][period_code] += stat_dict['toi'][period_code]
+    pgp_node['faceoff_taken'][period_code] += stat_dict['faceoff_taken'][period_code]
+    pgp_node['faceoff_won'][period_code] += stat_dict['faceoff_won'][period_code]
+    pgp_node['shot_on_goal'][period_code] += stat_dict['shot_on_goal'][period_code]
+    pgp_node['shot_saved'][period_code] += stat_dict['shot_saved'][period_code]
+    pgp_node['goal'][period_code] += stat_dict['goal'][period_code]
+    pgp_node['assist'][period_code] += stat_dict['assist'][period_code]
+    pgp_node['point'][period_code] += (stat_dict['goal'][period_code] + stat_dict['assist'][period_code])
+    pgp_node['penalties_duration'][period_code] += stat_dict['penalties_duration'][period_code]
+    cwc = 0
+
+def update_pgp_edge_stats(graph, player_pgp, other_pgp, period_id, stat_dict):
+    pgp_edge = graph.edges[player_pgp]
     cwc = 0
 
 def create_pgp_edges(graph, team_tgp):

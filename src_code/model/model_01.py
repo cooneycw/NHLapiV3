@@ -1,5 +1,6 @@
 from src_code.utils.utils import load_game_data, create_player_dict
-from src_code.utils.graph_utils import create_graph, show_single_game_trimmed, add_team_node, add_player_node, add_game, add_player_game_performance, update_tgp_stats
+from src_code.utils.graph_utils import create_graph, show_single_game_trimmed, add_team_node, add_player_node, add_game, \
+    add_player_game_performance, update_tgp_stats, update_pgp_stats, update_pgp_edge_stats
 import copy
 import networkx as nx
 
@@ -58,6 +59,7 @@ def process_shift_data(data_graph, team_game_map, shift_data):
     away_team = shift_data["away_teams"]
     home_team = shift_data["home_teams"]
     period_id = shift_data["period_id"]
+    period_code = shift_data["period_code"]
     time_index = shift_data["time_index"]
     time_on_ice = shift_data["time_on_ice"]
     event_id = shift_data["event_id"]
@@ -68,19 +70,30 @@ def process_shift_data(data_graph, team_game_map, shift_data):
     home_skaters = shift_data["home_skaters"]
     player_data = shift_data["player_data"]
 
+
     for i, shift in enumerate(shift_id):
         # one per shift
+        team_map = {}
         line_player_team_map = {}
         for player_dat in player_data[i]:
+            if player_dat['player_team'] not in team_map:
+                team_map[player_dat['player_team']] = (game_id[i], player_dat['player_team'])
             game_team = (game_id[i], player_dat['player_team'])
             if game_team not in line_player_team_map:
                 line_player_team_map[game_team] = []
             line_player_team_map[game_team].append(player_dat['player_id'])
 
-        for team in line_player_team_map:
+        for j, team in enumerate(line_player_team_map):
+            other_players = copy.deepcopy(line_player_team_map[team])
             for player in line_player_team_map[team]:
-                other_players = copy.deepcopy(line_player_team_map[team])
                 other_players.remove(player)
-                cwc = 0
+                team_tgp = str(team[0]) + '_' + team[1]
+                player_pgp = str(team[0]) + '_' + str(player)
+                update_tgp_stats(data_graph, team_tgp, period_code[i], player_data[i][j])
+                update_pgp_stats(data_graph, player_pgp, period_code[i], player_data[i][j])
+                for k, other in  enumerate(other_players):
+                    other_pgp = str(team[0]) + '_' + str(other)
+                    update_pgp_edge_stats(data_graph, player_pgp, other_pgp, period_code[i], player_data[i][j])
+                    cwc = 0
 
 
