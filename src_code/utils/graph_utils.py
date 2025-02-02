@@ -37,7 +37,6 @@ def add_game(graph, game):
         'toi': [0, 0, 0],
         'faceoff_taken': [0, 0, 0],
         'faceoff_won': [0, 0, 0],
-        'shot_attempt': [0, 0, 0],
         'shot_on_goal': [0, 0, 0],
         'shot_saved': [0, 0, 0],
         'goal': [0, 0, 0],
@@ -114,8 +113,6 @@ def update_tgp_stats(graph, team_tgp, period_code, stat_dict):
     tgp_node['hit_by_player'][period_code] += stat_dict['hit_by_player'][period_code]
     tgp_node['penalties_duration'][period_code] += stat_dict['penalties_duration'][period_code]
 
-    cwc = 0
-
 
 def update_pgp_stats(graph, player_pgp, period_code, stat_dict):
     """Update stats for a Player Game Performance node."""
@@ -128,8 +125,11 @@ def update_pgp_stats(graph, player_pgp, period_code, stat_dict):
     pgp_node['goal'][period_code] += stat_dict['goal'][period_code]
     pgp_node['assist'][period_code] += stat_dict['assist'][period_code]
     pgp_node['point'][period_code] += (stat_dict['goal'][period_code] + stat_dict['assist'][period_code])
+    pgp_node['hit_another_player'][period_code] += stat_dict['hit_another_player'][period_code]
+    pgp_node['hit_by_player'][period_code] += stat_dict['hit_by_player'][period_code]
     pgp_node['penalties_duration'][period_code] += stat_dict['penalties_duration'][period_code]
     cwc = 0
+
 
 def update_pgp_edge_stats(graph, player_pgp, other_pgp, period_id, stat_dict):
     pgp_edge = graph.edges[player_pgp]

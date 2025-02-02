@@ -272,11 +272,11 @@ def curate_data(config):
             all_good = False
             reason = 'home_goals'
             reasons.append(reason)
-        if data_games[i_game]['away_sog'] != sum(team_sums['away']['away_shot_on_goal_sum']):
+        if data_games[i_game]['away_sog'] != sum(team_sums['away']['away_shot_on_goal_sum'][0:2]):
             all_good = False
             reason = 'away_sog'
             reasons.append(reason)
-        if data_games[i_game]['home_sog'] != sum(team_sums['home']['home_shot_on_goal_sum']):
+        if data_games[i_game]['home_sog'] != sum(team_sums['home']['home_shot_on_goal_sum'][0:2]):
             all_good = False
             reason = 'home_sog'
             reasons.append(reason)
@@ -485,83 +485,50 @@ def process_goal(event, period_code, compare_shift, away_players, home_players, 
     player_stats = []
     toi = [0, 0, 0]
     toi[period_code] = calc_toi(game_time_event, last_event)
-    shot_on_goal_code = ['shot_on_goal', 'shot_on_goal_overtime', 'shot_on_goal_shootout'][period_code]
-    goal_code = ['goal', 'goal_overtime', 'goal_shootout'][period_code]
-    goal_against_code = ['goal_against', 'goal_against_overtime', 'goal_against_shootout'][period_code]
 
-    if period_code < 2:
-        for away_player in compare_shift['away_players']:
-            player_id = away_players[int(away_player[0])]
-            away_player_stats = create_player_stats(player_id)
+    on_ice = [int(sweater[0]) for sweater in compare_shift['away_players']]
+    for player_id in away_players_sorted.keys():
+        player_data = away_players_sorted[player_id]
+        away_player_stats = create_player_stats(player_data)
+        if away_players_sorted[player_id]['player_sweater'] in on_ice:
             away_player_stats['toi'][period_code] += toi[period_code]
-            if event['shot_attempt'] == player_id['player_id']:
-                away_player_stats['shot_attempt'][period_code] += 1
-            if event['shot_on_goal'] == player_id['player_id']:
-                away_player_stats['shot_on_goal'][period_code] += 1
-            if event['goal'] == player_id['player_id']:
-                away_player_stats['goal'][period_code] += 1
-            if event['goal_assist1'] == player_id['player_id']:
-                away_player_stats['assist'][period_code] += 1
-            if event['goal_assist2'] == player_id['player_id']:
-                away_player_stats['assist'][period_code] += 1
-            if event['goal_against'] == player_id['player_id']:
-                away_player_stats['goal_against'][period_code] += 1
+        if event['shot_attempt'] == player_id:
+            away_player_stats['shot_attempt'][period_code] += 1
+        if event['shot_on_goal'] == player_id:
+            away_player_stats['shot_on_goal'][period_code] += 1
+        if event['goal'] == player_id:
+            away_player_stats['goal'][period_code] += 1
+        if event['goal_assist1'] == player_id:
+            away_player_stats['assist'][period_code] += 1
+        if event['goal_assist2'] == player_id:
+            away_player_stats['assist'][period_code] += 1
+        if event['goal_against'] == player_id:
+            away_player_stats['goal_against'][period_code] += 1
 
-            player_stats.append(away_player_stats)
+        player_stats.append(away_player_stats)
 
-        for home_player in compare_shift['home_players']:
-            player_id = home_players[int(home_player[0])]
-            home_player_stats = create_player_stats(player_id)
+    on_ice = [int(sweater[0]) for sweater in compare_shift['home_players']]
+    for player_id in home_players_sorted.keys():
+        player_data = home_players_sorted[player_id]
+        home_player_stats = create_player_stats(player_data)
+        if home_players_sorted[player_id]['player_sweater'] in on_ice:
             home_player_stats['toi'][period_code] += toi[period_code]
-            if event['shot_attempt'] == player_id['player_id']:
-                home_player_stats['shot_attempt'][period_code] += 1
-            if event['shot_on_goal'] == player_id['player_id']:
-                home_player_stats['shot_on_goal'][period_code] += 1
-            if event['goal'] == player_id['player_id']:
-                home_player_stats['goal'][period_code] += 1
-            if event['goal_assist1'] == player_id['player_id']:
-                home_player_stats['assist'][period_code] += 1
-            if event['goal_assist2'] == player_id['player_id']:
-                home_player_stats['assist'][period_code] += 1
-            if event['goal_against'] == player_id['player_id']:
-                home_player_stats['goal_against'][period_code] += 1
+        if event['shot_attempt'] == player_id:
+            home_player_stats['shot_attempt'][period_code] += 1
+        if event['shot_on_goal'] == player_id:
+            home_player_stats['shot_on_goal'][period_code] += 1
+        if event['goal'] == player_id:
+            home_player_stats['goal'][period_code] += 1
+        if event['goal_assist1'] == player_id:
+            home_player_stats['assist'][period_code] += 1
+        if event['goal_assist2'] == player_id:
+            home_player_stats['assist'][period_code] += 1
+        if event['goal_against'] == player_id:
+            home_player_stats['goal_against'][period_code] += 1
 
-            player_stats.append(home_player_stats)
+        player_stats.append(home_player_stats)
 
-        return toi, player_stats
-
-    else:
-        on_ice = [int(sweater[0]) for sweater in compare_shift['away_players']]
-        for player_id in away_players_sorted.keys():
-            player_data = away_players_sorted[player_id]
-            away_player_stats = create_player_stats(player_data)
-            if away_players_sorted[player_id]['player_sweater'] in on_ice:
-                away_player_stats['toi'][period_code] += toi[period_code]
-            if event['shot_on_goal'] == player_id:
-                away_player_stats['shot_on_goal'][period_code] += 1
-            if event['goal'] == player_id:
-                away_player_stats['goal'][period_code] += 1
-            if event['goal_against'] == player_id:
-                away_player_stats['goal_against'][period_code] += 1
-
-            player_stats.append(away_player_stats)
-
-        on_ice = [int(sweater[0]) for sweater in compare_shift['home_players']]
-        for player_id in home_players_sorted.keys():
-            player_data = home_players_sorted[player_id]
-            home_player_stats = create_player_stats(player_data)
-            if home_players_sorted[player_id]['player_sweater'] in on_ice:
-                home_player_stats['toi'][period_code] += toi[period_code]
-            if event['shot_on_goal'] == player_id:
-                home_player_stats['shot_on_goal'][period_code] += 1
-            if event['goal'] == player_id:
-                home_player_stats['goal'][period_code] += 1
-            if event['goal_against'] == player_id:
-                home_player_stats['goal_against'][period_code] += 1
-
-            player_stats.append(home_player_stats)
-
-        return toi, player_stats
+    return toi, player_stats
 
 
 def process_shot_on_goal(verbose, event, period_code, compare_shift, away_players, home_players, last_event, game_time_event):

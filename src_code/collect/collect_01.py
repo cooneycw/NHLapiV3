@@ -276,7 +276,7 @@ def get_playbyplay_data(config):
         for game in config.Game.get_games():
             if game[1].date() >= config.curr_date:
                 continue
-            print(f'Getting shift data for {game[0]}:{game[2]}:{game[3]}')
+            print(f'Getting shift data for {game[0]}:{game[1]}:{game[2]}:{game[3]}')
             game_obj = config.Game.get_game(game[0])
             final_url = game_obj.playbyplay
             response = requests.get(final_url)
@@ -517,8 +517,10 @@ def process_plays(data):
                                  'player-equipment', 'chlg-hm-off-side', 'chlg-vis-off-side',
                                  'chlg-hm-missed-stoppage', 'home-timeout', 'chlg-vis-missed-stoppage',
                                  'puck-in-penalty-benches', 'ice-problem', 'net-dislodged-by-goaltender',
-                                 'rink-repair', 'chlg-league-missed-stoppage', 'official-injury']:
+                                 'rink-repair', 'chlg-league-missed-stoppage', 'official-injury', 'chlg-hm-puck-over-glass']:
+                print(f'\n')
                 print(f'collect play stoppage reason: {play["details"]["reason"]}')
+                print(f'\n')
         elif play.get('typeCode') in [520, 524]:  # period-start / game-end
             pass
         elif play.get('typeCode') == 521: # period-end
