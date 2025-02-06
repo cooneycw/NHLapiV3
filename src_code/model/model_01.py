@@ -94,6 +94,4 @@ def process_shift_data(data_graph, team_game_map, shift_data):
                 for k, other in  enumerate(other_players):
                     other_pgp = str(team[0]) + '_' + str(other)
                     update_pgp_edge_stats(data_graph, player_pgp, other_pgp, period_code[i], player_data[i][j])
-                    cwc = 0
-
 

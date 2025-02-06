@@ -23,7 +23,7 @@ def curate_data(config):
     event_categ = config.event_categ
     shift_categ = config.shift_categ
     for i_game, game in enumerate(data_plays):
-        # if data_games[i_game]['id'] !=  2024020218:
+        # if data_games[i_game]['id'] !=  2024020102:
         #     continue
         # else:
         #     cwc = 0
@@ -100,7 +100,7 @@ def curate_data(config):
                 elif event_details['event_name'] == 'missed-shot':
                     toi, player_stats = process_missed_shot(event, period_cd, compare_shift, away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'blocked-shot':
-                    toi, player_stats = process_blocked_shot(event, period_cd, compare_shift, away_players, home_players, last_event, game_time_event)
+                    toi, player_stats = process_blocked_shot(event, period_cd, compare_shift, away_players, home_players, away_players_sorted, home_players_sorted, last_event, game_time_event)
                 elif event_details['event_name'] == 'penalty':
                     toi, player_stats = process_penalty(config.verbose, event, period_cd, compare_shift, away_players_sorted, home_players_sorted, last_event, game_time_event)
                 elif event_details['event_name'] == 'stoppage':
@@ -591,28 +591,33 @@ def process_missed_shot(event, period_code, compare_shift, away_players, home_pl
     return toi, player_stats
 
 
-def process_blocked_shot(event, period_code, compare_shift, away_players, home_players, last_event, game_time_event):
+def process_blocked_shot(event, period_code, compare_shift, away_players, home_players, away_players_sorted, home_players_sorted, last_event, game_time_event):
     player_stats = []
     toi = [0, 0, 0]
     toi[period_code] = calc_toi(game_time_event, last_event)
 
-    for away_player in compare_shift['away_players']:
-        player_id = away_players[int(away_player[0])]
-        away_player_stats = create_player_stats(player_id)
-        away_player_stats['toi'][period_code] += toi[period_code]
-        if event['blocked_shot_attempt'] == player_id['player_id']:
+    on_ice = [int(sweater[0]) for sweater in compare_shift['away_players']]
+    for player_id in away_players_sorted.keys():
+        player_data = away_players_sorted[player_id]
+        away_player_stats = create_player_stats(player_data)
+        if away_players_sorted[player_id]['player_sweater'] in on_ice:
+            away_player_stats['toi'][period_code] += toi[period_code]
+        if event['blocked_shot_attempt'] == player_id:
             away_player_stats['shot_attempt'][period_code] += 1
-        if event['blocked_shot_saved'] == player_id['player_id']:
+        if event['blocked_shot_saved'] == player_id:
             away_player_stats['shot_blocked'][period_code] += 1
         player_stats.append(away_player_stats)
 
-    for home_player in compare_shift['home_players']:
-        player_id = home_players[int(home_player[0])]
-        home_player_stats = create_player_stats(player_id)
-        home_player_stats['toi'][period_code] += toi[period_code]
-        if event['blocked_shot_attempt'] == player_id['player_id']:
+
+    on_ice = [int(sweater[0]) for sweater in compare_shift['home_players']]
+    for player_id in home_players_sorted.keys():
+        player_data = home_players_sorted[player_id]
+        home_player_stats = create_player_stats(player_data)
+        if home_players_sorted[player_id]['player_sweater'] in on_ice:
+            home_player_stats['toi'][period_code] += toi[period_code]
+        if event['blocked_shot_attempt'] == player_id:
             home_player_stats['shot_attempt'][period_code] += 1
-        if event['blocked_shot_saved'] == player_id['player_id']:
+        if event['blocked_shot_saved'] == player_id:
             home_player_stats['shot_blocked'][period_code] += 1
         player_stats.append(home_player_stats)
 

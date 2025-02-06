@@ -1,3 +1,4 @@
+import copy
 import matplotlib.pyplot as plt
 import networkx as nx
 
@@ -19,13 +20,16 @@ def add_team_node(graph, team):
 
 def add_player_node(graph, player, player_dict):
     player_dict_details = player_dict[player]
-    player_dict_details['time_on_ice'] = [0, 0, 0]
-    player_dict_details['shots'] = [0, 0, 0]
-    player_dict_details['shot_attempts'] = [0, 0, 0]
-    player_dict_details['saves'] = [0, 0, 0]
-    player_dict_details['goals'] = [0, 0, 0]
-    player_dict_details['hits'] = [0, 0, 0]
-    player_dict_details['pim'] = [0, 0, 0]
+    player_dict_details['games_played'] = 0
+    player_dict_details['toi'] = [0, 0, 0]
+    player_dict_details['faceoff_taken'] = [0, 0, 0]
+    player_dict_details['faceofff_wons'] = [0, 0, 0]
+    player_dict_details['shot_on_goal'] = [0, 0, 0]
+    player_dict_details['shot_saved'] = [0, 0, 0]
+    player_dict_details['goal'] = [0, 0, 0]
+    player_dict_details['hit_another_player'] = [0, 0, 0]
+    player_dict_details['hit_by_player'] = [0, 0, 0]
+    player_dict_details['penalties_duration'] = [0, 0, 0]
 
     graph.add_node(player, type = 'player', **player_dict_details)
 
@@ -83,9 +87,11 @@ def add_player_game_performance(graph, roster):
         player_position = player['player_position']
         player_pgp = str(game_id) + '_' + str(player_id)
         team_tgp = str(game_id) + '_' + player_team
-        graph.add_node(player_pgp, type = 'player_game_performance', player_position=player_position, **default_stats)
-        graph.add_edge(player_pgp, team_tgp)
-        graph.add_edge(player_pgp, player_id, **default_stats)
+        stat_node_copy = copy.deepcopy(default_stats)
+        edge_node_copy = copy.deepcopy(default_stats)
+        graph.add_node(player_pgp, type = 'player_game_performance', player_position=player_position, **stat_node_copy)
+        graph.add_edge(player_pgp, team_tgp, type = 'player_game_performance_team_game_performance_edge')
+        graph.add_edge(player_pgp, player_id, type= 'player_game_performance_player_edge', **edge_node_copy)
 
         team_key = (game_id, player_team)
         if team_key not in team_game_map:
@@ -96,7 +102,8 @@ def add_player_game_performance(graph, roster):
     for team_key, player_pgps in team_game_map.items():
         for i in range(len(player_pgps)):
             for j in range(i + 1, len(player_pgps)):
-                graph.add_edge(player_pgps[i], player_pgps[j], **default_stats)
+                stat_copy = copy.deepcopy(default_stats)
+                graph.add_edge(player_pgps[i], player_pgps[j], **stat_copy)
 
     return team_game_map
 
@@ -117,6 +124,7 @@ def update_tgp_stats(graph, team_tgp, period_code, stat_dict):
 def update_pgp_stats(graph, player_pgp, period_code, stat_dict):
     """Update stats for a Player Game Performance node."""
     pgp_node = graph.nodes[player_pgp]
+    # print(f' updating {player_pgp} {pgp_node["faceoff_taken"]}')
     pgp_node['toi'][period_code] += stat_dict['toi'][period_code]
     pgp_node['faceoff_taken'][period_code] += stat_dict['faceoff_taken'][period_code]
     pgp_node['faceoff_won'][period_code] += stat_dict['faceoff_won'][period_code]
@@ -128,12 +136,26 @@ def update_pgp_stats(graph, player_pgp, period_code, stat_dict):
     pgp_node['hit_another_player'][period_code] += stat_dict['hit_another_player'][period_code]
     pgp_node['hit_by_player'][period_code] += stat_dict['hit_by_player'][period_code]
     pgp_node['penalties_duration'][period_code] += stat_dict['penalties_duration'][period_code]
-    cwc = 0
 
 
 def update_pgp_edge_stats(graph, player_pgp, other_pgp, period_id, stat_dict):
-    pgp_edge = graph.edges[player_pgp]
-    cwc = 0
+    # pgp_edge_stats = graph[player_pgp][other_pgp]
+    pgp_edge_stats = graph.get_edge_data(player_pgp, other_pgp, default={})
+    print(f'{player_pgp}:{other_pgp}:{pgp_edge_stats}')
+    if pgp_edge_stats == {}:
+        cwc = 0
+    else:
+        print(f'amending: {player_pgp} -> {other_pgp}')
+    pgp_edge_stats['toi'][period_id] += stat_dict['toi'][period_id]
+    pgp_edge_stats['faceoff_taken'][period_id] += stat_dict['faceoff_taken'][period_id]
+    pgp_edge_stats['faceoff_won'][period_id] += stat_dict['faceoff_won'][period_id]
+    pgp_edge_stats['shot_on_goal'][period_id] += stat_dict['shot_on_goal'][period_id]
+    pgp_edge_stats['shot_saved'][period_id] += stat_dict['shot_saved'][period_id]
+    pgp_edge_stats['goal'][period_id] += stat_dict['goal'][period_id]
+    pgp_edge_stats['hit_another_player'][period_id] += stat_dict['hit_another_player'][period_id]
+    pgp_edge_stats['hit_by_player'][period_id] += stat_dict['hit_by_player'][period_id]
+    pgp_edge_stats['penalties_duration'][period_id] += stat_dict['penalties_duration'][period_id]
+
 
 def create_pgp_edges(graph, team_tgp):
     """
@@ -143,16 +165,23 @@ def create_pgp_edges(graph, team_tgp):
     pgp_nodes = [node for node in graph.neighbors(team_tgp)
                  if graph.nodes[node]['type'] == 'player_game_performance']
 
+    default_stats = {
+        'toi': [0, 0, 0],
+        'faceoff_taken': [0, 0, 0],
+        'faceoff_won': [0, 0, 0],
+        'shot_on_goal': [0, 0, 0],
+        'shot_saved': [0, 0, 0],
+        'goal': [0, 0, 0],
+        'hit_another_player': [0, 0, 0],
+        'hit_by_player': [0, 0, 0],
+        'penalties_duration': [0, 0, 0],
+    }
     for i, pgp1 in enumerate(pgp_nodes):
         for pgp2 in pgp_nodes[i+1:]:
+            stat_copy = copy.deepcopy(default_stats)
             # Aggregate stats for the edge
-            stats1 = graph.nodes[pgp1].get('stats', {})
-            stats2 = graph.nodes[pgp2].get('stats', {})
-            aggregate_stats = {stat: stats1.get(stat, 0) + stats2.get(stat, 0)
-                               for stat in set(stats1) | set(stats2)}
-
             # Add edge with aggregate stats
-            graph.add_edge(pgp1, pgp2, stats=aggregate_stats)
+            graph.add_edge(pgp1, pgp2, type='pgp_pgp_edge', **stat_copy)
 
 
 def show_single_game_trimmed(graph, game_id):
