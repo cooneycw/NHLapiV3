@@ -1,6 +1,7 @@
 from src_code.utils.utils import load_game_data, create_player_dict
 from src_code.utils.graph_utils import create_graph, show_single_game_trimmed, add_team_node, add_player_node, add_game, \
     add_player_game_performance, update_tgp_stats, update_pgp_stats, update_pgp_edge_stats
+from src_code.utils.summary_utils import create_combined_summary_excel
 import copy
 import networkx as nx
 
@@ -45,14 +46,19 @@ def model_data(config):
     shifts = []
 
     for m, game in enumerate(data_games):
+        verbose = False
+        if (m % 10 == 0) and (m != 0):
+            print(f'game {m} of {len(data_games)}')
+            verbose = True
         # show_single_game_trimmed(data_graph, game['id'])
         shift_data = load_game_data(config.file_paths["game_output_pkl"] + f'{str(game["id"])}')
-        process_shift_data(data_graph, team_game_maps[m], shift_data)
+        process_shift_data(data_graph, verbose, team_game_maps[m], shift_data)
         shifts.append(shift_data)
-    cwc = 0
+
+    create_combined_summary_excel(data_graph, filename=config.file_paths['summary_excel'] + '.xlsx')
 
 
-def process_shift_data(data_graph, team_game_map, shift_data):
+def process_shift_data(data_graph, verbose, team_game_map, shift_data):
     # called on a per-game basis
     game_id = shift_data["game_id"]
     game_date = shift_data["game_date"]
@@ -72,6 +78,8 @@ def process_shift_data(data_graph, team_game_map, shift_data):
 
 
     for i, shift in enumerate(shift_id):
+        if (i % 100 == 0) and (i != 0) and verbose == True:
+            print(f'{i} of {len(shift_id)}')
         # one per shift
         team_map = {}
         line_player_team_map = {}

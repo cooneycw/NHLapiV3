@@ -141,11 +141,11 @@ def update_pgp_stats(graph, player_pgp, period_code, stat_dict):
 def update_pgp_edge_stats(graph, player_pgp, other_pgp, period_id, stat_dict):
     # pgp_edge_stats = graph[player_pgp][other_pgp]
     pgp_edge_stats = graph.get_edge_data(player_pgp, other_pgp, default={})
-    print(f'{player_pgp}:{other_pgp}:{pgp_edge_stats}')
+    # print(f'{player_pgp}:{other_pgp}:{pgp_edge_stats}')
     if pgp_edge_stats == {}:
         cwc = 0
-    else:
-        print(f'amending: {player_pgp} -> {other_pgp}')
+    # else:
+    #     print(f'amending: {player_pgp} -> {other_pgp}')
     pgp_edge_stats['toi'][period_id] += stat_dict['toi'][period_id]
     pgp_edge_stats['faceoff_taken'][period_id] += stat_dict['faceoff_taken'][period_id]
     pgp_edge_stats['faceoff_won'][period_id] += stat_dict['faceoff_won'][period_id]
