@@ -50,15 +50,17 @@ def add_game(graph, game):
     }
     game_id = game['id']
     game_date = game['game_date']
-    graph.add_node(game_id, type = 'game', game_date=game_date)
+    graph.add_node(game_id, type = 'game', game_date=game_date, home_team=game['homeTeam'], away_team=game['awayTeam'])
     graph.add_edge(game['awayTeam'], game_id, home = 0)
-    graph.add_edge(game['homeTeam'], game_id, home=1)
+    graph.add_edge(game['homeTeam'], game_id, home = 1)
     away_tgp = str(game_id) + '_' + game['awayTeam']
     home_tgp = str(game_id) + '_' +game['homeTeam']
-    graph.add_node(away_tgp, type = 'team_game_performance', **default_stats)
-    graph.add_node(home_tgp, type = 'team_game_performance', **default_stats)
-    graph.add_edge(away_tgp, game['awayTeam'])
-    graph.add_edge(home_tgp, game['homeTeam'])
+
+    away_stats = copy.deepcopy(default_stats)
+    home_stats = copy.deepcopy(default_stats)
+
+    graph.add_node(away_tgp, type = 'team_game_performance', **away_stats)
+    graph.add_node(home_tgp, type = 'team_game_performance', **home_stats)
     graph.add_edge(away_tgp, game_id)
     graph.add_edge(home_tgp, game_id)
 
