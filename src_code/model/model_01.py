@@ -1,9 +1,8 @@
 from src_code.utils.utils import load_game_data, create_player_dict
 from src_code.utils.graph_utils import create_graph, show_single_game_trimmed, add_team_node, add_player_node, add_game, \
     add_player_game_performance, update_tgp_stats, update_pgp_stats, update_pgp_edge_stats
-from src_code.utils.summary_utils import create_combined_summary_excel
+from src_code.utils.summary_utils import update_game_nodes
 import copy
-import networkx as nx
 
 
 def model_data(config):
@@ -55,7 +54,7 @@ def model_data(config):
         process_shift_data(data_graph, verbose, team_game_maps[m], shift_data)
         shifts.append(shift_data)
 
-    create_combined_summary_excel(data_graph, filename=config.file_paths['summary_excel'] + '.xlsx')
+    data_graph = update_game_nodes(data_graph)
 
 
 def process_shift_data(data_graph, verbose, team_game_map, shift_data):
