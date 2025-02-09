@@ -264,7 +264,7 @@ def curate_data(config):
                 team_sums['away']['away_goal_sum'][2] = 1
                 team_sums['home']['home_goal_sum'][2] = 0
 
-        # print(f'game_id: {game_id[0]}  toi: {sum(df["time_on_ice"].sum())} {data_games[i_game]["playbyplay"]}')
+
         all_good = True
         reasons = []
         reason = ''
@@ -327,14 +327,15 @@ def curate_data(config):
 
 
         if not all_good:
+            # print(f'game_id: {game_id[0]}  toi: {sum(df["time_on_ice"].sum())} {data_games[i_game]["playbyplay"]}')
             print(f'reasons: {reasons}')
             print(f'shift data: {team_sums["away"]}  {team_sums["home"]}')
             print(f'away_goals {data_games[i_game]["away_goals"]} away_sog {data_games[i_game]["away_sog"]} away_pim {data_games[i_game]["away_pim"]} away_takeaways {data_games[i_game]["away_take"]} away_giveaways {data_games[i_game]["away_give"]}')
             print(f'home_goals {data_games[i_game]["home_goals"]} home_sog {data_games[i_game]["home_sog"]} home_pim {data_games[i_game]["home_pim"]} home_takeaways {data_games[i_game]["home_take"]} home_giveaways {data_games[i_game]["home_give"]}')
         else:
-            pass
-            # print(f'game totals confirmed')
-            print('\n')
+            if (i_game % 100) == 0:
+                print(f'game totals confirmed')
+                print('\n')
         # Step 4: Export the DataFrame to CSV
 
         df.to_csv(config.file_paths['game_output_csv'] + f'{str(game_id[0])}.csv', na_rep='', index=False)
