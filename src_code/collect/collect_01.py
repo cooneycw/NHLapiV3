@@ -1,7 +1,8 @@
 from bs4 import BeautifulSoup
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from src_code.utils.utils import create_dummy_player
+import functools
 import re
 import requests
 
@@ -462,6 +463,33 @@ def process_boxscore(game_id, data_v1, data_v2):
 #         config.save_data(dimension_plays, save_results_plays)
 #         config.save_data(dimension_game_rosters, save_results_game_rosters)
 
+def internal_process_game(game, config):
+    """
+    Process a single game:
+      - Fetch the play-by-play page and process shifts.
+      - Fetch the play data and process plays and game rosters.
+    Returns a tuple: (results_shifts, results_plays, results_game_rosters)
+    """
+    print(f'Getting shift data for {game[0]}:{game[1]}:{game[2]}:{game[3]}')
+
+    # Process shifts
+    game_obj = config.Game.get_game(game[0])
+    final_url = game_obj.playbyplay
+    response = requests.get(final_url)
+    response.raise_for_status()  # Ensure the response is OK
+    soup = BeautifulSoup(response.text, 'html.parser')
+    results_shifts = process_shifts(config, soup)
+
+    # Process plays and game rosters
+    final_url_plays = config.get_endpoint("plays", game_id=game[0])
+    response_plays = requests.get(final_url_plays)
+    response_plays.raise_for_status()  # Ensure the response is OK
+    data_plays = response_plays.json()
+    results_plays = process_plays(data_plays)
+    results_game_rosters = process_game_rosters(data_plays)
+
+    return results_shifts, results_plays, results_game_rosters
+
 
 def get_playbyplay_data(config):
     print('Gathering play by play data...')
@@ -474,51 +502,27 @@ def get_playbyplay_data(config):
     prior_data_game_rosters = config.load_data(dimension_game_rosters)
 
     if prior_data_shifts and config.reload_playbyplay is False:
-        # (Serial case: do nothing or some other processing)
+        # Some processing if data is already available.
         for results in prior_data_plays:
-            cwc = 0
+            pass  # Your existing code logic
 
-    # If we need to load new playbyplay data…
     if (prior_data_shifts is None) or (config.reload_playbyplay is True):
-        # Filter out games that should be skipped (as in your serial code)
+        # Filter out games to process (as in your original code)
         games = [game for game in config.Game.get_games() if game[1].date() < config.curr_date]
 
-        # Define a helper function that does the work for one game.
-        # Defining it here allows it to use the config variable from the outer scope.
-        def process_game(game):
-            # Print game info (this will be printed in parallel, so ordering of prints may interleave)
-            print(f'Getting shift data for {game[0]}:{game[1]}:{game[2]}:{game[3]}')
-
-            # Get play-by-play page and process shifts
-            game_obj = config.Game.get_game(game[0])
-            final_url = game_obj.playbyplay
-            response = requests.get(final_url)
-            response.raise_for_status()  # Ensure the response is OK
-            soup = BeautifulSoup(response.text, 'html.parser')
-            results_shifts = process_shifts(config, soup)
-
-            # Get play data and process plays and game rosters
-            final_url_plays = config.get_endpoint("plays", game_id=game[0])
-            response_plays = requests.get(final_url_plays)
-            response_plays.raise_for_status()  # Ensure the response is OK
-            data_plays = response_plays.json()
-            results_plays = process_plays(data_plays)
-            results_game_rosters = process_game_rosters(data_plays)
-
-            # Return a tuple with all three results
-            return results_shifts, results_plays, results_game_rosters
-
-        # Use ThreadPoolExecutor to process games in parallel.
-        # executor.map returns results in the same order as the input list.
-        with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
-            results = list(executor.map(process_game, games))
+        # Use ProcessPoolExecutor for parallel processing.
+        with ProcessPoolExecutor(max_workers=config.max_workers) as executor:
+            # Use functools.partial to "fix" the config parameter.
+            func = functools.partial(internal_process_game, config=config)
+            # executor.map returns results in the same order as the input.
+            results = list(executor.map(func, games))
 
         # Unpack the results into separate lists
         save_results_shifts = [result[0] for result in results]
         save_results_plays = [result[1] for result in results]
         save_results_game_rosters = [result[2] for result in results]
 
-        # Save the data
+        # Save the processed data
         config.save_data(dimension_shifts, save_results_shifts)
         config.save_data(dimension_plays, save_results_plays)
         config.save_data(dimension_game_rosters, save_results_game_rosters)
@@ -739,7 +743,8 @@ def process_plays(data):
                                  'player-equipment', 'chlg-hm-off-side', 'chlg-vis-off-side',
                                  'chlg-hm-missed-stoppage', 'home-timeout', 'chlg-vis-missed-stoppage',
                                  'puck-in-penalty-benches', 'ice-problem', 'net-dislodged-by-goaltender',
-                                 'rink-repair', 'chlg-league-missed-stoppage', 'official-injury', 'chlg-hm-puck-over-glass']:
+                                 'rink-repair', 'chlg-league-missed-stoppage', 'official-injury', 'chlg-hm-puck-over-glass',
+                                 'chlg-league-off-side','switch-sides']:
                 print(f'\n')
                 print(f'collect play stoppage reason: {play["details"]["reason"]}')
                 print(f'\n')

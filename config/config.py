@@ -12,8 +12,8 @@ from datetime import datetime
 class Config:
     def __init__(self, input_dict):
         self.verbose = input_dict['verbose']
-        # self.curr_date = datetime.now().date()
-        self.curr_date = datetime(2024, 10, 15).date()
+        self.curr_date = datetime.now().date()
+        # self.curr_date = datetime(2022, 11, 6).date()
         self.max_workers = 30
         self.base_url = "https://api-web.nhle.com"
         self.base_url_lines = "https://www.dailyfaceoff.com"

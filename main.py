@@ -6,7 +6,7 @@ from src_code.model.model_01 import model_data
 def main():
     config_dict = {
         "verbose": False,
-        "season_count": 1,
+        "season_count": 3,
         "delete_pickles": True,
         "reload_seasons": True,
         "reload_teams": True,
@@ -19,7 +19,7 @@ def main():
     config = Config(config_dict)
     get_data(config)
     curate_data(config)
-    # model_data(config)
+    model_data(config)
 
 
 def get_data(config):
