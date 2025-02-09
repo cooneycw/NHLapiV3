@@ -334,8 +334,7 @@ def curate_data(config):
         else:
             pass
             # print(f'game totals confirmed')
-
-        print('\n')
+            print('\n')
         # Step 4: Export the DataFrame to CSV
 
         df.to_csv(config.file_paths['game_output_csv'] + f'{str(game_id[0])}.csv', na_rep='', index=False)
