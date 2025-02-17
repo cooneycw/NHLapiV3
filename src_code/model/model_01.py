@@ -1,8 +1,8 @@
 from src_code.utils.utils import load_game_data, create_player_dict
 from src_code.utils.graph_utils import (
-    create_graph, add_team_node, add_player_node, add_game,
+    create_graph, add_team_node, add_player_node, add_game, process_games_chronologically,
     add_player_game_performance, update_tgp_stats, update_pgp_stats, update_pgp_edge_stats,
-    update_player_temporal_features, update_game_outcome)
+    update_game_outcome)
 from src_code.utils.summary_utils import update_game_nodes
 from src_code.utils.display_graph_utils import visualize_game_graph
 import copy
@@ -36,8 +36,7 @@ def model_data(config):
     for j, player in enumerate(player_list):
         add_player_node(data_graph, player, player_dict)
 
-    for k, game in enumerate(data_games):
-        add_game(data_graph, game)
+    process_games_chronologically(data_graph, data_games)
 
     team_game_maps = []
     for l, roster in enumerate(data_game_roster):
@@ -66,20 +65,18 @@ def model_data(config):
         shifts.append(shift_data)
         update_game_outcome(data_graph, game['id'], game)
 
-        for player in data_game_roster[m]:
-            update_player_temporal_features(
-                data_graph,
-                player['player_id'],
-                str(game['id']),
-                game['game_date']
-            )
+        # for player in data_game_roster[m]:
+        #     update_player_temporal_features(
+        #         data_graph,
+        #         player['player_id'],
+        #         str(game['id']),
+        #         game['game_date']
+        #     )
 
         # Create visualization after all game data is processed and updated
-        #if (m % 10 == 0) and (m != 0):
-        if True:
+        if m % 10 == 0:
             visualize_game_graph(data_graph, game['id'],
                                  output_path=f"{config.file_paths['game_output_jpg']}/game_{game['id']}_network_{game['game_date']}.jpg")
-            cwc = 0
 
     cwc = 0
 

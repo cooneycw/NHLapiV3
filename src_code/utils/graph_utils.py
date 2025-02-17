@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Any
 import copy
 import networkx as nx
@@ -25,15 +25,32 @@ def add_player_node(graph, player, player_dict):
     player_dict_details['games_played'] = 0
     player_dict_details['toi'] = [0, 0, 0]
     player_dict_details['faceoff_taken'] = [0, 0, 0]
-    player_dict_details['faceofff_wons'] = [0, 0, 0]
+    player_dict_details['faceoff_won'] = [0, 0, 0]
+    player_dict_details['shot_attempt'] = [0, 0, 0]
+    player_dict_details['shot_on_goal'] = [0, 0, 0]
+    player_dict_details['shot_missed'] = [0, 0, 0]
+    player_dict_details['shot_blocked'] = [0, 0, 0]
     player_dict_details['shot_on_goal'] = [0, 0, 0]
     player_dict_details['shot_saved'] = [0, 0, 0]
+    player_dict_details['shot_missed_shootout'] = [0, 0, 0]
     player_dict_details['goal'] = [0, 0, 0]
+    player_dict_details['goal_against'] = [0, 0, 0]
+    player_dict_details['giveaways'] = [0, 0, 0]
+    player_dict_details['takeaway'] = [0, 0, 0]
     player_dict_details['hit_another_player'] = [0, 0, 0]
     player_dict_details['hit_by_player'] = [0, 0, 0]
+    player_dict_details['penalties'] = [0, 0, 0]
+    player_dict_details['penalties_served'] = [0, 0, 0]
+    player_dict_details['penalties_drawn'] = [0, 0, 0]
+    player_dict_details['penalty_shot'] = [0, 0, 0]
+    player_dict_details['penalty_shot_goal'] = [0, 0, 0]
+    player_dict_details['penalty_shot_saved'] = [0, 0, 0]
     player_dict_details['penalties_duration'] = [0, 0, 0]
 
     graph.add_node(player, type = 'player', **player_dict_details)
+
+
+
 
 
 def add_game(graph, game):
@@ -43,11 +60,24 @@ def add_game(graph, game):
         'toi': [0, 0, 0],
         'faceoff_taken': [0, 0, 0],
         'faceoff_won': [0, 0, 0],
+        'shot_attempt': [0, 0, 0],
+        'shot_missed': [0, 0, 0],
+        'shot_blocked': [0, 0, 0],
         'shot_on_goal': [0, 0, 0],
         'shot_saved': [0, 0, 0],
+        'shot_missed_shootout': [0, 0, 0],
         'goal': [0, 0, 0],
+        'goal_against': [0, 0, 0],
+        'giveaways': [0, 0, 0],
+        'takeaways': [0, 0, 0],
         'hit_another_player': [0, 0, 0],
         'hit_by_player': [0, 0, 0],
+        'penalties': [0, 0, 0],
+        'penalties_served': [0, 0, 0],
+        'penalties_drawn': [0, 0, 0],
+        'penalty_shot': [0, 0, 0],
+        'penalty_shot_goal': [0, 0, 0],
+        'penalty_shot_saved': [0, 0, 0],
         'penalties_duration': [0, 0, 0],
     }
     game_id = game['id']
@@ -67,18 +97,163 @@ def add_game(graph, game):
     graph.add_edge(home_tgp, game_id)
 
 
+def process_games_chronologically(data_graph, data_games):
+    """
+    Process games in chronological order to ensure accurate days_since_last_game calculations.
+
+    Args:
+        data_graph: NetworkX graph to update
+        data_games: List of game dictionaries
+
+    Returns:
+        bool: True if processing was successful
+    """
+    # First validate the dates
+    dates_valid, issues = validate_game_dates(data_games)
+    if not dates_valid:
+        print("Found issues with game dates:")
+        for issue in issues:
+            print(f"  - {issue}")
+        print("\nProceeding with chronological processing anyway...")
+
+    # Create a sorted copy of games
+    sorted_games = sorted(data_games,
+                          key=lambda x: datetime.strptime(x['game_date'], '%Y-%m-%d')
+                          if isinstance(x['game_date'], str)
+                          else x['game_date'])
+
+    # Process games in chronological order
+    for game in sorted_games:
+        add_game(data_graph, game)
+        update_days_since_last_game(data_graph, game['id'])
+
+    return True
+
+
+def validate_game_dates(data_games):
+    """
+    Validate that all game dates can be parsed and identify any ordering issues.
+
+    Args:
+        data_games: List of game dictionaries
+
+    Returns:
+        tuple: (bool indicating if dates are valid, list of any parsing/ordering issues found)
+    """
+    issues = []
+    parsed_dates = []
+
+    for game in data_games:
+        game_id = game['id']
+        game_date = game['game_date']
+
+        try:
+            if isinstance(game_date, str):
+                parsed_date = datetime.strptime(game_date, '%Y-%m-%d')
+            else:
+                parsed_date = game_date
+            parsed_dates.append((game_id, parsed_date))
+        except ValueError as e:
+            issues.append(f"Game {game_id}: Unable to parse date '{game_date}' - {str(e)}")
+
+    # Check if games are in chronological order in the input
+    sorted_dates = sorted(parsed_dates, key=lambda x: x[1])
+    if parsed_dates != sorted_dates:
+        issues.append("Warning: Games in data_games are not in chronological order")
+        # Find specific out-of-order examples
+        for i in range(len(parsed_dates) - 1):
+            if parsed_dates[i][1] > parsed_dates[i + 1][1]:
+                issues.append(f"Game {parsed_dates[i][0]} ({parsed_dates[i][1]}) comes before "
+                              f"Game {parsed_dates[i + 1][0]} ({parsed_dates[i + 1][1]}) but has a later date")
+
+    return len(issues) == 0, issues
+
+
+def update_days_since_last_game(graph, game_id):
+    """
+    Update the days since last game for Team Game Performance (TGP) nodes,
+    considering all previous games chronologically.
+
+    Args:
+        graph: NetworkX graph containing game and TGP data
+        game_id: ID of the current game
+    """
+    game_node = graph.nodes[game_id]
+    game_date = game_node['game_date']
+    home_team = game_node['home_team']
+    away_team = game_node['away_team']
+
+    # Get TGP nodes for current game
+    home_tgp = f"{game_id}_{home_team}"
+    away_tgp = f"{game_id}_{away_team}"
+
+    # Convert game_date to datetime if it's a string
+    if isinstance(game_date, str):
+        current_game_date = datetime.strptime(game_date, '%Y-%m-%d')
+    else:
+        current_game_date = game_date
+
+    # Find last game for each team
+    for team, tgp in [(home_team, home_tgp), (away_team, away_tgp)]:
+        last_game_date = None
+
+        # Look through all TGP nodes
+        team_games = []
+        for node in graph.nodes():
+            # Check if it's a TGP node
+            if isinstance(node, str) and graph.nodes[node].get('type') == 'team_game_performance':
+                node_parts = node.split('_')
+                # Verify it's for this team and not the current game
+                if len(node_parts) == 2 and node_parts[1] == team and node != tgp:
+                    try:
+                        node_game_id = int(node_parts[0])
+                        if node_game_id != game_id:
+                            game_date = graph.nodes[node_game_id]['game_date']
+                            if isinstance(game_date, str):
+                                game_date = datetime.strptime(game_date, '%Y-%m-%d')
+                            team_games.append((node_game_id, game_date))
+                    except (ValueError, KeyError) as e:
+                        print(f"Warning: Error processing node {node}: {str(e)}")
+
+        # Sort games by date to find the most recent one before current game
+        team_games.sort(key=lambda x: x[1])
+        previous_games = [g for g in team_games if g[1] < current_game_date]
+
+        if previous_games:
+            last_game_date = previous_games[-1][1]
+            days_diff = min((current_game_date - last_game_date).days, 30)
+        else:
+            days_diff = 30  # Maximum value for first game
+
+        # Add the days_since_last_game to the TGP node
+        graph.nodes[tgp]['days_since_last_game'] = days_diff
+
+
 def add_player_game_performance(graph, roster):
     default_stats = {
         'toi': [0, 0, 0],
         'faceoff_taken': [0, 0, 0],
         'faceoff_won': [0, 0, 0],
+        'shot_attempt': [0, 0, 0],
+        'shot_missed': [0, 0, 0],
+        'shot_blocked': [0, 0, 0],
         'shot_on_goal': [0, 0, 0],
         'shot_saved': [0, 0, 0],
+        'shot_missed_shootout': [0, 0, 0],
         'goal': [0, 0, 0],
         'assist': [0, 0, 0],
         'point': [0, 0, 0],
+        'goal_against': [0, 0, 0],
+        'giveaways': [0, 0, 0],
+        'takeaways': [0, 0, 0],
         'hit_another_player': [0, 0, 0],
         'hit_by_player': [0, 0, 0],
+        'penalties': [0, 0, 0],
+        'penalties_served': [0, 0, 0],
+        'penalties_drawn': [0, 0, 0],
+        'penalty_shot': [0, 0, 0],
+        'penalty_shot_goal': [0, 0, 0],
+        'penalty_shot_saved': [0, 0, 0],
         'penalties_duration': [0, 0, 0],
     }
 
@@ -122,17 +297,31 @@ def update_tgp_stats(graph, team_tgp, period_code, stat_dict):
     #     print(f"Adding goals: {stat_dict['goal']}")
     #     print(f"Period: {period_code}")
 
-
     tgp_node['faceoff_taken'][period_code] += stat_dict['faceoff_taken'][period_code]
     tgp_node['faceoff_won'][period_code] += stat_dict['faceoff_won'][period_code]
+    tgp_node['shot_attempt'][period_code] += stat_dict['shot_attempt'][period_code]
+    tgp_node['shot_missed'][period_code] += stat_dict['shot_missed'][period_code]
+    tgp_node['shot_missed_shootout'][period_code] += stat_dict['shot_missed_shootout'][period_code]
     tgp_node['shot_on_goal'][period_code] += stat_dict['shot_on_goal'][period_code]
+    tgp_node['shot_blocked'][period_code] += stat_dict['shot_blocked'][period_code]
     tgp_node['shot_saved'][period_code] += stat_dict['shot_saved'][period_code]
     tgp_node['goal'][period_code] += stat_dict['goal'][period_code]
+    tgp_node['goal_against'][period_code] += stat_dict['goal_against'][period_code]
+    tgp_node['giveaways'][period_code] += stat_dict['giveaways'][period_code]
+    tgp_node['takeaways'][period_code] += stat_dict['takeaways'][period_code]
     tgp_node['hit_another_player'][period_code] += stat_dict['hit_another_player'][period_code]
     tgp_node['hit_by_player'][period_code] += stat_dict['hit_by_player'][period_code]
+    tgp_node['penalties'][period_code] += stat_dict['penalties'][period_code]
+    tgp_node['penalties_served'][period_code] += stat_dict['penalties_served'][period_code]
+    tgp_node['penalties_drawn'][period_code] += stat_dict['penalties_drawn'][period_code]
+    tgp_node['penalty_shot'][period_code] += stat_dict['penalty_shot'][period_code]
+    tgp_node['penalty_shot_goal'][period_code] += stat_dict['penalty_shot_goal'][period_code]
+    tgp_node['penalty_shot_saved'][period_code] += stat_dict['penalty_shot_saved'][period_code]
     tgp_node['penalties_duration'][period_code] += stat_dict['penalties_duration'][period_code]
+
     # if stat_dict['goal'][period_code] == 1:
     #     print(f"Updated goals: {tgp_node['goal']}")
+
 
 def update_pgp_stats(graph, player_pgp, period_code, stat_dict):
     """Update stats for a Player Game Performance node."""
@@ -148,16 +337,31 @@ def update_pgp_stats(graph, player_pgp, period_code, stat_dict):
     pgp_node['toi'][period_code] += stat_dict['toi'][period_code]
     pgp_node['faceoff_taken'][period_code] += stat_dict['faceoff_taken'][period_code]
     pgp_node['faceoff_won'][period_code] += stat_dict['faceoff_won'][period_code]
+    pgp_node['shot_attempt'][period_code] += stat_dict['shot_attempt'][period_code]
+    pgp_node['shot_missed'][period_code] += stat_dict['shot_missed'][period_code]
+    pgp_node['shot_missed_shootout'][period_code] += stat_dict['shot_missed_shootout'][period_code]
     pgp_node['shot_on_goal'][period_code] += stat_dict['shot_on_goal'][period_code]
+    pgp_node['shot_blocked'][period_code] += stat_dict['shot_blocked'][period_code]
     pgp_node['shot_saved'][period_code] += stat_dict['shot_saved'][period_code]
     pgp_node['goal'][period_code] += stat_dict['goal'][period_code]
     pgp_node['assist'][period_code] += stat_dict['assist'][period_code]
     pgp_node['point'][period_code] += (stat_dict['goal'][period_code] + stat_dict['assist'][period_code])
+    pgp_node['goal_against'][period_code] += stat_dict['goal_against'][period_code]
+    pgp_node['giveaways'][period_code] += stat_dict['giveaways'][period_code]
+    pgp_node['takeaways'][period_code] += stat_dict['takeaways'][period_code]
     pgp_node['hit_another_player'][period_code] += stat_dict['hit_another_player'][period_code]
     pgp_node['hit_by_player'][period_code] += stat_dict['hit_by_player'][period_code]
+    pgp_node['penalties'][period_code] += stat_dict['penalties'][period_code]
+    pgp_node['penalties_served'][period_code] += stat_dict['penalties_served'][period_code]
+    pgp_node['penalties_drawn'][period_code] += stat_dict['penalties_drawn'][period_code]
+    pgp_node['penalty_shot'][period_code] += stat_dict['penalty_shot'][period_code]
+    pgp_node['penalty_shot_goal'][period_code] += stat_dict['penalty_shot_goal'][period_code]
+    pgp_node['penalty_shot_saved'][period_code] += stat_dict['penalty_shot_saved'][period_code]
     pgp_node['penalties_duration'][period_code] += stat_dict['penalties_duration'][period_code]
+
     # if stat_dict['goal'][period_code] == 1:
     #     print(f"Updated goals: {pgp_node['goal']}")
+
 
 def update_pgp_edge_stats(graph, player_pgp, other_pgp, period_id, stat_dict):
     # pgp_edge_stats = graph[player_pgp][other_pgp]
@@ -170,9 +374,12 @@ def update_pgp_edge_stats(graph, player_pgp, other_pgp, period_id, stat_dict):
     pgp_edge_stats['toi'][period_id] += stat_dict['toi'][period_id]
     pgp_edge_stats['faceoff_taken'][period_id] += stat_dict['faceoff_taken'][period_id]
     pgp_edge_stats['faceoff_won'][period_id] += stat_dict['faceoff_won'][period_id]
+    pgp_edge_stats['shot_attempt'][period_id] += stat_dict['shot_attempt'][period_id]
     pgp_edge_stats['shot_on_goal'][period_id] += stat_dict['shot_on_goal'][period_id]
+    pgp_edge_stats['shot_blocked'][period_id] += stat_dict['shot_blocked'][period_id]
     pgp_edge_stats['shot_saved'][period_id] += stat_dict['shot_saved'][period_id]
     pgp_edge_stats['goal'][period_id] += stat_dict['goal'][period_id]
+    pgp_edge_stats['goal_against'][period_id] += stat_dict['goal_against'][period_id]
     pgp_edge_stats['hit_another_player'][period_id] += stat_dict['hit_another_player'][period_id]
     pgp_edge_stats['hit_by_player'][period_id] += stat_dict['hit_by_player'][period_id]
     pgp_edge_stats['penalties_duration'][period_id] += stat_dict['penalties_duration'][period_id]
@@ -203,168 +410,6 @@ def create_pgp_edges(graph, team_tgp):
             # Aggregate stats for the edge
             # Add edge with aggregate stats
             graph.add_edge(pgp1, pgp2, type='pgp_pgp_edge', **stat_copy)
-
-
-def get_player_game_nodes(data_graph, player_id: int, game_id: str) -> List[Dict]:
-    """
-    Get previous game nodes for a player from the graph, up to current game.
-
-    Args:
-        data_graph: NetworkX graph containing all game data
-        player_id: Player's ID
-        game_id: Current game ID to establish cutoff
-
-    Returns:
-        List of game nodes, each containing game data
-    """
-    # Find all PGP (Player Game Performance) nodes for this player
-    pgp_nodes = []
-
-    # Convert game_id to string for consistent comparison
-    game_id_str = str(game_id)
-
-    for node in data_graph.nodes():
-        # Check if this is a PGP node for our player
-        if isinstance(node, str) and '_' in node:
-            node_parts = node.split('_')
-            if len(node_parts) == 2:
-                node_game_id, node_player_id = node_parts
-
-                # Check if this is for our player and from a previous game
-                if (str(node_player_id) == str(player_id) and
-                        node_game_id < game_id_str and
-                        data_graph.nodes[node].get('type') == 'player_game_performance'):
-
-                    # Get game date from the game node
-                    game_node = node_game_id  # The game ID itself is the node
-                    if game_node in data_graph.nodes:
-                        game_data = data_graph.nodes[game_node]
-                        game_date = game_data.get('game_date')
-
-                        node_data = data_graph.nodes[node]
-                        pgp_nodes.append({
-                            'node_id': node,
-                            'game_id': node_game_id,
-                            'game_date': game_date,
-                            'toi': node_data.get('toi', [0, 0, 0]),
-                            'goals': node_data.get('goal', [0, 0, 0])
-                        })
-
-    # Sort by game date if available, otherwise by game_id
-    pgp_nodes.sort(key=lambda x: (x.get('game_date', ''), x['game_id']))
-    return pgp_nodes[-5:]  # Return last 5 games
-
-
-def calculate_temporal_features(data_graph, player_id: int, current_game_id: str,
-                                current_game_date: str) -> Dict[str, Any]:
-    """
-    Calculate temporal features for a player leading up to current game.
-    """
-    # Get last 5 games
-    last_5_games = get_player_game_nodes(data_graph, player_id, current_game_id)
-
-    if not last_5_games:
-        # Return default values if no previous games
-        return {
-            'days_since_last_game': None,
-            'avg_days_between_games': None,
-            'toi_fatigue': 0.0,
-            'games_fatigue': 0.0,
-            'recent_form': 0.0,
-            'last_5_goals': [0, 0, 0],  # [reg, ot, shootout]
-            'last_5_toi': [0, 0, 0],  # [reg, ot, shootout]
-        }
-
-    # Calculate days since last game
-    last_game_date = last_5_games[-1].get('game_date')
-    days_since_last = (calculate_days_between_games(last_game_date, current_game_date)
-                       if last_game_date else None)
-
-    # Calculate average days between games
-    between_game_days = []
-    for i in range(len(last_5_games) - 1):
-        game1_date = last_5_games[i].get('game_date')
-        game2_date = last_5_games[i + 1].get('game_date')
-        if game1_date and game2_date:
-            days = calculate_days_between_games(game1_date, game2_date)
-            between_game_days.append(days)
-
-    avg_days_between = np.mean(between_game_days) if between_game_days else None
-
-    # Calculate weighted features
-    weights = np.exp([-i / 2.5 for i in range(len(last_5_games))])
-    weights = weights / np.sum(weights)
-
-    # Sum all periods for each game
-    toi_values = [sum(game.get('toi', [0, 0, 0])) for game in last_5_games]
-    goal_values = [sum(game.get('goals', [0, 0, 0])) for game in last_5_games]
-
-    toi_fatigue = np.sum(weights * np.array(toi_values))
-    recent_form = np.sum(weights * np.array(goal_values))
-
-    # Games fatigue calculation
-    days_to_games = [calculate_days_between_games(game.get('game_date', current_game_date),
-                                                  current_game_date)
-                     for game in last_5_games]
-    games_fatigue = sum(1 / max(1, days) for days in days_to_games)
-
-    # Aggregate last 5 games statistics
-    last_5_goals = [0, 0, 0]
-    last_5_toi = [0, 0, 0]
-
-    for game in last_5_games:
-        goals = game.get('goals', [0, 0, 0])
-        toi = game.get('toi', [0, 0, 0])
-        for i in range(3):
-            last_5_goals[i] += goals[i]
-            last_5_toi[i] += toi[i]
-
-    return {
-        'days_since_last_game': days_since_last,
-        'avg_days_between_games': avg_days_between,
-        'toi_fatigue': toi_fatigue,
-        'games_fatigue': games_fatigue,
-        'recent_form': recent_form,
-        'last_5_goals': last_5_goals,
-        'last_5_toi': last_5_toi,
-    }
-
-
-def calculate_days_between_games(game1_date: str, game2_date: str) -> float:
-    """Calculate days between two games."""
-    date1 = datetime.strptime(game1_date, '%Y-%m-%d')
-    date2 = datetime.strptime(game2_date, '%Y-%m-%d')
-    return abs((date2 - date1).days)
-
-
-def update_player_temporal_features(data_graph, player_id: int,
-                                    current_game_id: str, current_game_date: str) -> None:
-    """
-    Update player's node in graph with temporal features.
-
-    Args:
-        data_graph: NetworkX graph containing all game data
-        player_id: Player's ID
-        current_game_id: Current game's ID
-        current_game_date: Current game's date (YYYY-MM-DD)
-    """
-    # Calculate features
-    temporal_features = calculate_temporal_features(
-        data_graph,
-        player_id,
-        current_game_id,
-        current_game_date
-    )
-
-    # Update node in graph
-    node_id = f"{current_game_id}_{player_id}"
-    if node_id in data_graph:
-        # Add temporal features to existing node data
-        node_data = data_graph.nodes[node_id]
-        node_data.update({
-            'temporal_features': temporal_features
-        })
-        data_graph.nodes[node_id].update(node_data)
 
 
 def update_game_outcome(graph, game_id, game):
@@ -398,9 +443,6 @@ def update_game_outcome(graph, game_id, game):
     elif (home_node['goal'][2] > 0) or (away_node['goal'][2] > 0):
         period_index = 2
 
-    if period_index == 2:
-        cwc = 0
-
     # Update win/loss arrays - only one element will be 1
     if home_goals > away_goals:
         home_node['win'] = [0] * 3
@@ -409,11 +451,22 @@ def update_game_outcome(graph, game_id, game):
         away_node['loss'] = [0] * 3
         home_node['win'][period_index] = 1
         away_node['loss'][period_index] = 1
-    else:
+        home_node['valid'] = True
+        away_node['valid'] = True
+    elif home_goals < away_goals:
         home_node['win'] = [0] * 3
         home_node['loss'] = [0] * 3
         away_node['win'] = [0] * 3
         away_node['loss'] = [0] * 3
         away_node['win'][period_index] = 1
         home_node['loss'][period_index] = 1
+        home_node['valid'] = True
+        away_node['valid'] = True
+    else:
+        home_node['win'] = [0] * 3
+        home_node['loss'] = [0] * 3
+        away_node['win'] = [0] * 3
+        away_node['loss'] = [0] * 3
+        home_node['valid'] = False
+        away_node['valid'] = False
 

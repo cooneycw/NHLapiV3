@@ -27,7 +27,7 @@ def visualize_game_graph(data_graph, game_id, output_path=None, edge_sample_rate
     game_subgraph = data_graph.subgraph(game_nodes)
 
     # Create figure
-    plt.figure(figsize=(24, 36), dpi=300)
+    plt.figure(figsize=(30, 45), dpi=300)
 
     # Create layout with nodes properly spaced
     pos = create_hierarchical_layout(game_subgraph, game_id)
@@ -47,7 +47,7 @@ def visualize_game_graph(data_graph, game_id, output_path=None, edge_sample_rate
         nx.draw_networkx_nodes(game_subgraph, pos,
                                nodelist=nodes,
                                node_color=color,
-                               node_size=5000,
+                               node_size=6000,
                                alpha=0.7)
 
     # Draw edges with different styles based on type
@@ -105,7 +105,10 @@ def visualize_game_graph(data_graph, game_id, output_path=None, edge_sample_rate
         label = f"{node}\n"
 
         if node_data.get('type') == 'player_game_performance':
-            stats = ['toi', 'goal', 'assist', 'point', 'shot_on_goal']
+            stats = ['player_position',
+                     'toi', 'goal', 'assist', 'point', 'faceoff', 'faceoff_won',
+                     'shot_on_goal', 'shot_blocked', 'shot_saved',
+                     'goal_saved', 'goal_against']
             for stat in stats:
                 if stat in node_data:
                     if isinstance(node_data[stat], list):
@@ -116,7 +119,8 @@ def visualize_game_graph(data_graph, game_id, output_path=None, edge_sample_rate
         elif node_data.get('type') == 'team_game_performance':
             # Enhanced team stats
             stats = [
-                'home', 'goal', 'shot_on_goal', 'shot_saved', 'faceoff_taken',
+                'home', 'days_since_last_game', 'valid',
+                'goal', 'goal_against', 'shot_attempt', 'shot_on_goal', 'shot_blocked', 'shot_saved', 'faceoff_taken',
                 'faceoff_won', 'hit_another_player', 'hit_by_player',
                 'penalties_duration', 'win', 'loss'
             ]
@@ -175,7 +179,7 @@ def create_hierarchical_layout(graph, game_id):
     n_teams = len(team_nodes)
     for i, node in enumerate(team_nodes):
         angle = 2 * np.pi * i / n_teams
-        pos[node] = np.array([3 * np.cos(angle), 3 * np.sin(angle)])
+        pos[node] = np.array([4 * np.cos(angle), 4 * np.sin(angle)])
 
     # Place TGP nodes between game and their respective teams
     game_data = graph.nodes[game_id]
@@ -198,14 +202,14 @@ def create_hierarchical_layout(graph, game_id):
 
     # Place PGP nodes in an outer circle with more spacing
     n_pgp = len(pgp_nodes)
-    radius = 6  # Increased radius for better spacing
+    radius = 8  # Increased radius for better spacing
     for i, node in enumerate(pgp_nodes):
         angle = 2 * np.pi * i / n_pgp
         pos[node] = np.array([radius * np.cos(angle), radius * np.sin(angle)])
 
     # Place player nodes in the outermost circle with even more spacing
     n_players = len(player_nodes)
-    outer_radius = 9  # Increased radius for better spacing
+    outer_radius = 12  # Increased radius for better spacing
     for i, node in enumerate(player_nodes):
         angle = 2 * np.pi * i / n_players
         pos[node] = np.array([outer_radius * np.cos(angle), outer_radius * np.sin(angle)])
