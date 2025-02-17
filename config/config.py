@@ -12,8 +12,9 @@ from datetime import datetime
 class Config:
     def __init__(self, input_dict):
         self.verbose = input_dict['verbose']
-        self.curr_date = datetime.now().date()
-        # self.curr_date = datetime(2022, 11, 6).date()
+        self.produce_csv = input_dict['produce_csv']
+        # self.curr_date = datetime.now().date()
+        self.curr_date = datetime(2024, 11, 6).date()
         self.max_workers = 30
         self.base_url = "https://api-web.nhle.com"
         self.base_url_lines = "https://www.dailyfaceoff.com"
@@ -45,6 +46,7 @@ class Config:
             "all_game_rosters": os.path.join(self.current_path, "storage", "pickles", "all_game_rosters.pkl"),
             "game_output_csv": os.path.join(self.current_path, "storage", "output", "csv", "game_output"),
             "game_output_pkl": os.path.join(self.current_path, "storage", "output", "pkl", "game_output"),
+            "game_output_jpg": os.path.join(self.current_path, "storage", "output", "jpg"),
             "summary_excel": os.path.join(self.current_path, "storage", "output", "excel", "summary_excel"),
         }
 

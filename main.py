@@ -3,10 +3,12 @@ from src_code.collect.collect_01 import get_season_data, get_team_list, get_game
 from src_code.curate.curate_01 import curate_data
 from src_code.model.model_01 import model_data
 
+
 def main():
     config_dict = {
         "verbose": False,
-        "season_count": 3,
+        "produce_csv": False,
+        "season_count": 1,
         "delete_pickles": True,
         "reload_seasons": True,
         "reload_teams": True,
@@ -17,8 +19,8 @@ def main():
         "reload_rosters": True,
     }
     config = Config(config_dict)
-    get_data(config)
-    curate_data(config)
+    # get_data(config)
+    # curate_data(config)
     model_data(config)
 
 

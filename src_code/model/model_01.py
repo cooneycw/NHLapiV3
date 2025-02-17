@@ -1,7 +1,10 @@
 from src_code.utils.utils import load_game_data, create_player_dict
-from src_code.utils.graph_utils import create_graph, show_single_game_trimmed, add_team_node, add_player_node, add_game, \
-    add_player_game_performance, update_tgp_stats, update_pgp_stats, update_pgp_edge_stats
+from src_code.utils.graph_utils import (
+    create_graph, add_team_node, add_player_node, add_game,
+    add_player_game_performance, update_tgp_stats, update_pgp_stats, update_pgp_edge_stats,
+    update_player_temporal_features, update_game_outcome)
 from src_code.utils.summary_utils import update_game_nodes
+from src_code.utils.display_graph_utils import visualize_game_graph
 import copy
 
 
@@ -51,10 +54,34 @@ def model_data(config):
             verbose = True
         # show_single_game_trimmed(data_graph, game['id'])
         shift_data = load_game_data(config.file_paths["game_output_pkl"] + f'{str(game["id"])}')
+
+        # for q, player_dat in enumerate(shift_data['player_data']):
+        #
+        #     goal_instances = find_goals(player_dat)
+        #     for goal in goal_instances:
+        #         print(
+        #             f"Goal found - shift index: {q} Player Index: {goal['player_index']}, Player ID: {goal['player_id']}, Team: {goal['player_team']}, Periods: {goal['goal_periods']}")
+
         process_shift_data(data_graph, verbose, team_game_maps[m], shift_data)
         shifts.append(shift_data)
+        update_game_outcome(data_graph, game['id'], game)
 
-    data_graph = update_game_nodes(data_graph)
+        for player in data_game_roster[m]:
+            update_player_temporal_features(
+                data_graph,
+                player['player_id'],
+                str(game['id']),
+                game['game_date']
+            )
+
+        # Create visualization after all game data is processed and updated
+        #if (m % 10 == 0) and (m != 0):
+        if True:
+            visualize_game_graph(data_graph, game['id'],
+                                 output_path=f"{config.file_paths['game_output_jpg']}/game_{game['id']}_network_{game['game_date']}.jpg")
+            cwc = 0
+
+    cwc = 0
 
 
 def process_shift_data(data_graph, verbose, team_game_map, shift_data):
@@ -90,15 +117,36 @@ def process_shift_data(data_graph, verbose, team_game_map, shift_data):
                 line_player_team_map[game_team] = []
             line_player_team_map[game_team].append(player_dat['player_id'])
 
-        for j, team in enumerate(line_player_team_map):
+        for team in line_player_team_map:
             other_players = copy.deepcopy(line_player_team_map[team])
-            for player in line_player_team_map[team]:
-                other_players.remove(player)
+            for j, player_dat in enumerate(player_data[i]):
+                if player_dat['player_id'] not in line_player_team_map[team]:
+                    continue
+                other_players.remove(player_dat['player_id'])
                 team_tgp = str(team[0]) + '_' + team[1]
-                player_pgp = str(team[0]) + '_' + str(player)
-                update_tgp_stats(data_graph, team_tgp, period_code[i], player_data[i][j])
-                update_pgp_stats(data_graph, player_pgp, period_code[i], player_data[i][j])
+                player_pgp = str(team[0]) + '_' + str(player_dat['player_id'])
+                # if player_data[i][j]['goal'][period_code[i]] == 1:
+                #     print(j, player_dat['player_id'])
+                #     print(line_player_team_map[team])
+                #     print(f"{i}:{j}:{player_data[i][j]['player_team']}:{player_data[i][j]['goal']}")
+                #     print('\n')
+                update_tgp_stats(data_graph, team_tgp, period_code[i], player_dat)
+                update_pgp_stats(data_graph, player_pgp, period_code[i], player_dat)
                 for k, other in  enumerate(other_players):
                     other_pgp = str(team[0]) + '_' + str(other)
-                    update_pgp_edge_stats(data_graph, player_pgp, other_pgp, period_code[i], player_data[i][j])
+                    update_pgp_edge_stats(data_graph, player_pgp, other_pgp, period_code[i], player_dat)
+
+
+def find_goals(player_data):
+    goals = []
+    for i, shift_player in enumerate(player_data):
+        # Check if any period has a goal
+        if 1 in shift_player['goal']:
+            goals.append({
+                'player_index': i,
+                'player_id': shift_player['player_id'],
+                'player_team': shift_player['player_team'],
+                'goal_periods': [p + 1 for p, goal in enumerate(shift_player['goal']) if goal == 1]
+            })
+    return goals
 
