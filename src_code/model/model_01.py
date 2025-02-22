@@ -2,7 +2,8 @@ from src_code.utils.utils import load_game_data, create_player_dict
 from src_code.utils.graph_utils import (
     create_graph, add_team_node, add_player_node, add_game, process_games_chronologically,
     add_player_game_performance, update_tgp_stats, update_pgp_stats, update_pgp_edge_stats,
-    update_game_outcome)
+    update_game_outcome, get_historical_tgp_stats, get_historical_pgp_stats,
+    get_historical_pgp_edge_stats, calculate_historical_stats)
 from src_code.utils.summary_utils import update_game_nodes
 from src_code.utils.display_graph_utils import visualize_game_graph
 import copy
@@ -78,6 +79,9 @@ def model_data(config):
             visualize_game_graph(data_graph, game['id'],
                                  output_path=f"{config.file_paths['game_output_jpg']}/game_{game['id']}_network_{game['game_date']}.jpg")
 
+    # After ALL games are processed, calculate historical stats
+    print(f"processing historic game stats...")
+    calculate_historical_stats(config, data_graph)
     cwc = 0
 
 

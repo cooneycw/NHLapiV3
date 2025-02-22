@@ -73,6 +73,28 @@ class Config:
         self.lines = None
         self.event_categ = self.event_registry()
         self.shift_categ = self.shift_registry()
+        self.stat_window_sizes = [5, 20, 50, 150]
+        self.stat_attributes = {
+            'team_stats': [
+                'win', 'loss', 'faceoff_taken', 'faceoff_won', 'shot_attempt', 'shot_missed',
+                'shot_blocked', 'shot_on_goal', 'shot_saved', 'shot_missed_shootout',
+                'goal', 'goal_against', 'giveaways', 'takeaways', 'hit_another_player',
+                'hit_by_player', 'penalties', 'penalties_served', 'penalties_drawn',
+                'penalty_shot', 'penalty_shot_goal', 'penalty_shot_saved', 'penalties_duration'
+            ],
+            'player_stats': [
+                'toi', 'faceoff_taken', 'faceoff_won', 'shot_attempt', 'shot_missed',
+                'shot_blocked', 'shot_on_goal', 'shot_saved', 'shot_missed_shootout',
+                'goal', 'assist', 'point', 'goal_against', 'giveaways', 'takeaways',
+                'hit_another_player', 'hit_by_player', 'penalties', 'penalties_served',
+                'penalties_drawn', 'penalty_shot', 'penalty_shot_goal', 'penalty_shot_saved',
+                'penalties_duration'
+            ],
+            'player_pair_stats': [
+                'toi', 'faceoff_taken', 'faceoff_won', 'shot_on_goal', 'shot_saved',
+                'goal', 'hit_another_player', 'hit_by_player', 'penalties_duration'
+            ]
+        }
 
     def get_endpoint(self, key, **kwargs):
         """Construct and return the full URL for a given endpoint key with placeholders replaced by kwargs."""

@@ -106,7 +106,7 @@ def visualize_game_graph(data_graph, game_id, output_path=None, edge_sample_rate
 
         if node_data.get('type') == 'player_game_performance':
             stats = ['player_position',
-                     'toi', 'goal', 'assist', 'point', 'faceoff', 'faceoff_won',
+                     'toi', 'goal', 'assist', 'point', 'faceoff_taken', 'faceoff_won',
                      'shot_on_goal', 'shot_blocked', 'shot_saved',
                      'goal_saved', 'goal_against']
             for stat in stats:

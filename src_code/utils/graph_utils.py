@@ -1,8 +1,7 @@
+from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
 import copy
 import networkx as nx
-import numpy as np
 
 
 def create_graph():
@@ -57,7 +56,6 @@ def add_game(graph, game):
     default_stats = {
         'win': [0, 0, 0],
         'loss': [0, 0, 0],
-        'toi': [0, 0, 0],
         'faceoff_taken': [0, 0, 0],
         'faceoff_won': [0, 0, 0],
         'shot_attempt': [0, 0, 0],
@@ -469,4 +467,370 @@ def update_game_outcome(graph, game_id, game):
         away_node['loss'] = [0] * 3
         home_node['valid'] = False
         away_node['valid'] = False
+
+
+def get_historical_tgp_stats(graph, team_id, current_game_id, stat_attributes, n_games):
+    """
+    Calculate historical team game performance stats.
+
+    Args:
+        graph: NetworkX graph containing all game data
+        team_id: ID of the team to analyze
+        current_game_id: Current game ID to exclude
+        stat_attributes: Dictionary of attributes to track
+        n_games: Number of previous games to include in the window
+
+    Returns:
+        tuple: (stats dictionary, actual game count) where stats contains the averaged stats
+        and actual_games is the number of games actually found in the window
+    """
+    current_game_date = graph.nodes[current_game_id]['game_date']
+    if isinstance(current_game_date, str):
+        current_game_date = datetime.strptime(current_game_date, '%Y-%m-%d')
+
+    # Find all previous TGP nodes for this team
+    team_games = []
+    for node in graph.nodes():
+        if isinstance(node, str) and node.endswith(f"_{team_id}"):
+            if graph.nodes[node].get('type') == 'team_game_performance':
+                game_id_from_node = int(node.split('_')[0])
+                if game_id_from_node != current_game_id:
+                    game_date = graph.nodes[game_id_from_node]['game_date']
+                    if isinstance(game_date, str):
+                        game_date = datetime.strptime(game_date, '%Y-%m-%d')
+                    if game_date < current_game_date:
+                        team_games.append((node, game_date))
+
+    team_games.sort(key=lambda x: x[1], reverse=True)
+    recent_games = team_games[:n_games]
+
+    if not recent_games:
+        return None, 0
+
+    # Initialize stats
+    team_stats = {attr: [0, 0, 0] for attr in stat_attributes['team_stats']}
+
+    # Aggregate stats
+    for tgp_node, _ in recent_games:
+        node_data = graph.nodes[tgp_node]
+        for stat_name in stat_attributes['team_stats']:
+            if stat_name in node_data:
+                team_stats[stat_name] = [
+                    team_stats[stat_name][i] + node_data[stat_name][i]
+                    for i in range(3)
+                ]
+
+    # Calculate averages
+    actual_games = len(recent_games)  # Track actual number of games found
+    team_stats = {k: [v[i] / actual_games for i in range(3)] for k, v in team_stats.items()}
+
+    return team_stats, actual_games
+
+
+def get_historical_pgp_stats(graph, team_id, current_game_id, stat_attributes, n_games):
+    """
+    Calculate historical player game performance stats with game counts.
+
+    Args:
+        graph: NetworkX graph containing all game data
+        team_id: ID of the team to analyze
+        current_game_id: Current game ID to exclude
+        stat_attributes: Dictionary of attributes to track
+        n_games: Number of previous games to include
+
+    Returns:
+        tuple: (stats dictionary, games_played dictionary) where stats contains the averaged stats
+        and games_played contains the count of games used for each player's calculation
+    """
+    current_game_date = graph.nodes[current_game_id]['game_date']
+    if isinstance(current_game_date, str):
+        current_game_date = datetime.strptime(current_game_date, '%Y-%m-%d')
+
+    # Find relevant games
+    team_games = []
+    for node in graph.nodes():
+        if isinstance(node, str) and node.endswith(f"_{team_id}"):
+            if graph.nodes[node].get('type') == 'team_game_performance':
+                game_id_from_node = int(node.split('_')[0])
+                if game_id_from_node != current_game_id:
+                    game_date = graph.nodes[game_id_from_node]['game_date']
+                    if isinstance(game_date, str):
+                        game_date = datetime.strptime(game_date, '%Y-%m-%d')
+                    if game_date < current_game_date:
+                        team_games.append((node, game_date))
+
+    team_games.sort(key=lambda x: x[1], reverse=True)
+    recent_games = team_games[:n_games]
+
+    if not recent_games:
+        return None, None
+
+    player_stats = defaultdict(lambda: {attr: [0, 0, 0] for attr in stat_attributes['player_stats']})
+    player_games = defaultdict(int)
+    player_date_ranges = defaultdict(lambda: {'first_game': None, 'last_game': None})
+
+    # Aggregate player stats from recent games
+    for tgp_node, game_date in recent_games:
+        game_id_from_node = tgp_node.split('_')[0]
+        player_pgps = [
+            node for node in graph.nodes()
+            if isinstance(node, str)
+               and node.startswith(f"{game_id_from_node}_")
+               and graph.nodes[node].get('type') == 'player_game_performance'
+        ]
+
+        for pgp in player_pgps:
+            node_data = graph.nodes[pgp]
+            player_id = None
+            for neighbor in graph.neighbors(pgp):
+                if graph.nodes[neighbor].get('type') == 'player':
+                    player_id = neighbor
+                    break
+
+            if player_id:
+                player_games[player_id] += 1
+
+                # Update date range for player
+                if player_date_ranges[player_id]['first_game'] is None or game_date < player_date_ranges[player_id][
+                    'first_game']:
+                    player_date_ranges[player_id]['first_game'] = game_date
+                if player_date_ranges[player_id]['last_game'] is None or game_date > player_date_ranges[player_id][
+                    'last_game']:
+                    player_date_ranges[player_id]['last_game'] = game_date
+
+                for stat_name in stat_attributes['player_stats']:
+                    if stat_name in node_data:
+                        player_stats[player_id][stat_name] = [
+                            player_stats[player_id][stat_name][i] + node_data[stat_name][i]
+                            for i in range(3)
+                        ]
+
+    # Calculate averages and include metadata
+    stats = {}
+    for player, stats_dict in player_stats.items():
+        player_avg_stats = {
+            k: [v[i] / player_games[player] for i in range(3)]
+            for k, v in stats_dict.items()
+        }
+        # Add metadata
+        player_avg_stats['games_played'] = player_games[player]
+        player_avg_stats['date_range'] = {
+            'first_game': player_date_ranges[player]['first_game'],
+            'last_game': player_date_ranges[player]['last_game']
+        }
+        stats[player] = player_avg_stats
+
+    return stats
+
+
+def get_historical_pgp_edge_stats(graph, team_id, current_game_id, stat_attributes, n_games):
+    """
+    Calculate historical player-pair stats with game counts and date ranges.
+
+    Args:
+        graph: NetworkX graph containing all game data
+        team_id: ID of the team to analyze
+        current_game_id: Current game ID to exclude
+        stat_attributes: Dictionary of attributes to track
+        n_games: Number of previous games to include
+
+    Returns:
+        dict: Dictionary containing pair stats, including games played and date ranges
+    """
+    current_game_date = graph.nodes[current_game_id]['game_date']
+    if isinstance(current_game_date, str):
+        current_game_date = datetime.strptime(current_game_date, '%Y-%m-%d')
+
+    # Find relevant games
+    team_games = []
+    for node in graph.nodes():
+        if isinstance(node, str) and node.endswith(f"_{team_id}"):
+            if graph.nodes[node].get('type') == 'team_game_performance':
+                game_id_from_node = int(node.split('_')[0])
+                if game_id_from_node != current_game_id:
+                    game_date = graph.nodes[game_id_from_node]['game_date']
+                    if isinstance(game_date, str):
+                        game_date = datetime.strptime(game_date, '%Y-%m-%d')
+                    if game_date < current_game_date:
+                        team_games.append((node, game_date))
+
+    team_games.sort(key=lambda x: x[1], reverse=True)
+    recent_games = team_games[:n_games]
+
+    if not recent_games:
+        return None
+
+    pair_stats = defaultdict(lambda: {attr: [0, 0, 0] for attr in stat_attributes['player_pair_stats']})
+    pair_games = defaultdict(int)
+    pair_date_ranges = defaultdict(lambda: {'first_game': None, 'last_game': None})
+
+    # Aggregate stats from recent games
+    for tgp_node, game_date in recent_games:
+        game_id_from_node = tgp_node.split('_')[0]
+        player_pgps = [
+            node for node in graph.nodes()
+            if isinstance(node, str)
+               and node.startswith(f"{game_id_from_node}_")
+               and graph.nodes[node].get('type') == 'player_game_performance'
+        ]
+
+        for pgp1 in player_pgps:
+            for pgp2 in player_pgps:
+                if pgp1 < pgp2 and graph.has_edge(pgp1, pgp2):
+                    player1_id = None
+                    player2_id = None
+
+                    for neighbor in graph.neighbors(pgp1):
+                        if graph.nodes[neighbor].get('type') == 'player':
+                            player1_id = neighbor
+                            break
+                    for neighbor in graph.neighbors(pgp2):
+                        if graph.nodes[neighbor].get('type') == 'player':
+                            player2_id = neighbor
+                            break
+
+                    if player1_id and player2_id:
+                        pair_key = tuple(sorted([player1_id, player2_id]))
+                        pair_games[pair_key] += 1
+
+                        # Update date range for pair
+                        if pair_date_ranges[pair_key]['first_game'] is None or game_date < pair_date_ranges[pair_key][
+                            'first_game']:
+                            pair_date_ranges[pair_key]['first_game'] = game_date
+                        if pair_date_ranges[pair_key]['last_game'] is None or game_date > pair_date_ranges[pair_key][
+                            'last_game']:
+                            pair_date_ranges[pair_key]['last_game'] = game_date
+
+                        edge_data = graph[pgp1][pgp2]
+                        for stat_name in stat_attributes['player_pair_stats']:
+                            if stat_name in edge_data:
+                                pair_stats[pair_key][stat_name] = [
+                                    pair_stats[pair_key][stat_name][i] + edge_data[stat_name][i]
+                                    for i in range(3)
+                                ]
+
+    # Calculate averages and include metadata
+    stats = {}
+    for pair, stats_dict in pair_stats.items():
+        pair_avg_stats = {
+            k: [v[i] / pair_games[pair] for i in range(3)]
+            for k, v in stats_dict.items()
+        }
+        # Add metadata
+        pair_avg_stats['games_played'] = pair_games[pair]
+        pair_avg_stats['date_range'] = {
+            'first_game': pair_date_ranges[pair]['first_game'],
+            'last_game': pair_date_ranges[pair]['last_game']
+        }
+        stats[pair] = pair_avg_stats
+
+    return stats
+
+
+def calculate_historical_stats(config, data_graph):
+    """
+    Calculate all historical statistics after the graph is fully built.
+    This should be called after all games are processed.
+    """
+    # Get all game nodes sorted by date
+    game_nodes = []
+    for node in data_graph.nodes():
+        if data_graph.nodes[node].get('type') == 'game':
+            game_date = data_graph.nodes[node]['game_date']
+            if isinstance(game_date, str):
+                game_date = datetime.strptime(game_date, '%Y-%m-%d')
+            game_nodes.append((node, game_date))
+
+    game_nodes.sort(key=lambda x: x[1])  # Sort chronologically
+
+    # Process each game
+    for idx, (game_id, _) in enumerate(game_nodes, 1):
+        if idx % 20 == 0:
+            print(f"Processing game {idx} of {len(game_nodes)} ({(idx / len(game_nodes)) * 100:.1f}%)")
+        game_node = data_graph.nodes[game_id]
+        home_team = game_node['home_team']
+        away_team = game_node['away_team']
+
+        # Calculate historical stats for both teams' TGP nodes
+        for team_id in [home_team, away_team]:
+            team_tgp = f"{game_id}_{team_id}"
+            for window in config.stat_window_sizes:
+                hist_stats, actual_games = get_historical_tgp_stats(
+                    data_graph, team_id, game_id, config.stat_attributes, window
+                )
+                if hist_stats:
+                    # Store the actual game count for this window
+                    data_graph.nodes[team_tgp][f'hist_{window}_game_count'] = actual_games
+
+                    # Store the historical stats
+                    for stat_name, values in hist_stats.items():
+                        hist_name = f'hist_{window}_{stat_name}'
+                        data_graph.nodes[team_tgp][hist_name] = values
+
+        # Get all PGP nodes for this game
+        pgp_nodes = [
+            node for node in data_graph.nodes()
+            if isinstance(node, str)
+               and node.startswith(f"{game_id}_")
+               and data_graph.nodes[node].get('type') == 'player_game_performance'
+        ]
+
+        # Calculate historical stats for PGP nodes
+        for pgp in pgp_nodes:
+            player_id = None
+            player_team = None
+            for neighbor in data_graph.neighbors(pgp):
+                if data_graph.nodes[neighbor].get('type') == 'player':
+                    player_id = neighbor
+                elif data_graph.nodes[neighbor].get('type') == 'team_game_performance':
+                    player_team = neighbor.split('_')[1]
+
+            if player_id and player_team:
+                for window in config.stat_window_sizes:
+                    hist_stats = get_historical_pgp_stats(data_graph, player_team, game_id, config.stat_attributes,
+                                                          window)
+                    if hist_stats and player_id in hist_stats:
+                        for stat_name, values in hist_stats[player_id].items():
+                            if stat_name not in ('games_played', 'date_range'):
+                                hist_name = f'hist_{window}_{stat_name}'
+                                data_graph.nodes[pgp][hist_name] = values
+                        # Add metadata
+                        data_graph.nodes[pgp][f'hist_{window}_games_played'] = hist_stats[player_id]['games_played']
+                        data_graph.nodes[pgp][f'hist_{window}_date_range'] = hist_stats[player_id]['date_range']
+
+        # Calculate historical stats for edges between PGP nodes
+        for i in range(len(pgp_nodes)):
+            for j in range(i + 1, len(pgp_nodes)):
+                if data_graph.has_edge(pgp_nodes[i], pgp_nodes[j]):
+                    player1_id = None
+                    player2_id = None
+                    team_id = None
+
+                    # Get player IDs and team
+                    for neighbor in data_graph.neighbors(pgp_nodes[i]):
+                        if data_graph.nodes[neighbor].get('type') == 'player':
+                            player1_id = neighbor
+                        elif data_graph.nodes[neighbor].get('type') == 'team_game_performance':
+                            team_id = neighbor.split('_')[1]
+
+                    for neighbor in data_graph.neighbors(pgp_nodes[j]):
+                        if data_graph.nodes[neighbor].get('type') == 'player':
+                            player2_id = neighbor
+
+                    if player1_id and player2_id and team_id:
+                        for window in config.stat_window_sizes:
+                            hist_stats = get_historical_pgp_edge_stats(
+                                data_graph, team_id, game_id, config.stat_attributes, window
+                            )
+                            if hist_stats:
+                                pair_key = tuple(sorted([player1_id, player2_id]))
+                                if pair_key in hist_stats:
+                                    edge_data = data_graph.get_edge_data(pgp_nodes[i], pgp_nodes[j])
+                                    for stat_name, values in hist_stats[pair_key].items():
+                                        if stat_name not in ('games_played', 'date_range'):
+                                            hist_name = f'hist_{window}_{stat_name}'
+                                            edge_data[hist_name] = values
+                                    # Add metadata
+                                    edge_data[f'hist_{window}_games_played'] = hist_stats[pair_key]['games_played']
+                                    edge_data[f'hist_{window}_date_range'] = hist_stats[pair_key]['date_range']
 
