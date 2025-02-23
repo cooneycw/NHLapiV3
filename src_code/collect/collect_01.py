@@ -46,46 +46,10 @@ def get_team_list(config):
         config.save_data(dimension, team_list)
 
 
-# def get_game_list(config):
-#     print(f'Gathering game data by team...')
-#     dimension = "all_games"
-#     prior_data = config.load_data(dimension)
-#     if prior_data and config.reload_games is False:
-#         for game in prior_data:
-#             _ = config.Game.create_game(game[0], game[1], game[2], game[3], game[4])
-#     if (prior_data is None) or (config.reload_games is True):
-#         save_data = []
-#         for season in config.Season.get_selected_seasons(config.season_count):
-#             for team in config.Team.get_teams():
-#                 print(f'Getting games for {season[0]}:{team[0]}')
-#                 final_url = config.get_endpoint("schedule", team=team[0], season=season[0])
-#                 response = requests.get(final_url)
-#                 response.raise_for_status()  # Ensure the response is OK
-#                 data = response.json()
-#                 for game in data["games"]:
-#                     if game["gameType"] != 2:
-#                         continue
-#                     if game['gameDate'] == '2025-01-08':  # postponed game due to wildfires
-#                         if game['awayTeam']['abbrev'] == 'CGY':
-#                             continue
-#                     game_date = datetime.strptime(game["gameDate"], "%Y-%m-%d")
-#                     home_team = game["homeTeam"]['abbrev']
-#                     away_team = game["awayTeam"]['abbrev']
-#                     game_obj = config.Game.create_game(game['id'], game_date, home_team, away_team, season[0])
-#                     if game_obj is None:
-#                         continue
-#                     save_data.append(game_obj.get_game_tuple())
-#
-#         # Set the games in the config, assuming this modifies some shared state or configuration
-#         config.save_data(dimension, save_data)
 def fetch_games_for_team_and_season(config, season, team):
-    """
-    Worker function to fetch games for a single (season, team) pair.
-    Returns a list of tuples (game_id, game_date, home_team, away_team, season).
-    """
     final_url = config.get_endpoint("schedule", team=team[0], season=season[0])
     response = requests.get(final_url)
-    response.raise_for_status()  # Raise an HTTPError if the response was unsuccessful
+    response.raise_for_status()
 
     data = response.json()
     partial_data = []
@@ -101,11 +65,15 @@ def fetch_games_for_team_and_season(config, season, team):
                 continue
 
         game_date = datetime.strptime(game["gameDate"], "%Y-%m-%d")
+
+        # Skip future games
+        if game_date.date() >= config.curr_date:
+            continue
+
         home_team = game["homeTeam"]['abbrev']
         away_team = game["awayTeam"]['abbrev']
-
-        # Create the game object (if this modifies shared state, be aware of thread safety)
         game_obj = config.Game.create_game(game['id'], game_date, home_team, away_team, season[0])
+
         if game_obj is None:
             continue
 
@@ -119,12 +87,12 @@ def get_game_list(config):
     dimension = "all_games"
     prior_data = config.load_data(dimension)
 
-    # If we already have data and reload is False, just recreate game objects from stored data
     if prior_data and config.reload_games is False:
-        for game in prior_data:
-            # Rebuild each game object
+        # Only create games for past dates
+        filtered_games = [game for game in prior_data if game[1].date() < config.curr_date]
+        for game in filtered_games:
             _ = config.Game.create_game(game[0], game[1], game[2], game[3], game[4])
-        return  # No need to re-fetch
+        return
 
     # Otherwise, fetch in parallel
     season_team_pairs = []
@@ -132,96 +100,28 @@ def get_game_list(config):
         for team in config.Team.get_teams():
             season_team_pairs.append((season, team))
 
-    # results_in_order will hold the final data in the same order we enumerated season_team_pairs
     results_in_order = [None] * len(season_team_pairs)
 
-    # Parallelize fetching with a ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
-        # Map each future to the index of its (season, team) in the original list
         future_to_index = {
             executor.submit(fetch_games_for_team_and_season, config, season, team): i
             for i, (season, team) in enumerate(season_team_pairs)
         }
 
-        # Process results as they complete
         for future in as_completed(future_to_index):
             i = future_to_index[future]
             try:
-                data = future.result()  # Raises if there was an exception in the worker
+                data = future.result()
                 results_in_order[i] = data
             except Exception as exc:
                 print(f"Request {i} raised an exception: {exc}")
-                # Decide on your error-handling policy here
 
-    # Consolidate the parallel results into a single list
     save_data = []
     for data_list in results_in_order:
         if data_list:
             save_data.extend(data_list)
 
-    # Finally, save all fetched data
     config.save_data(dimension, save_data)
-
-
-# def get_boxscore_list(config):
-#     print(f'Gathering boxscore data...')
-#     dimension_games = "all_boxscores"
-#     dimension_players = "all_players"
-#     prior_data_games = config.load_data(dimension_games)
-#     prior_data_players = config.load_data(dimension_players)
-#
-#     if prior_data_games and prior_data_players and config.reload_boxscores is False:
-#         for game_results in prior_data_games:
-#             game_obj = config.Game.get_game(game_results['id'])
-#             game_obj.update_game(game_results)
-#         for player_results in prior_data_players:
-#             player_obj = config.Player.create_player(player_results['player_id'])
-#             i = player_results['i']
-#             game = player_results['game']
-#             player_obj.update_player(game[0], game[1], game[3 - i], game[4], player_results)
-#
-#     if (prior_data_games is None) or (config.reload_boxscores is True):
-#         save_game_results = []
-#         save_player_results = []
-#         for game in config.Game.get_games():
-#             if game[1].date() >= config.curr_date:
-#                 continue
-#
-#             print(f'Getting boxscore for {game[0]}:{game[1]}:{game[2]}:{game[3]}')
-#             final_url_v1 = config.get_endpoint("boxscore_v1", game_id=game[0])
-#             response_v1 = requests.get(final_url_v1)
-#             response_v1.raise_for_status()  # Ensure the response is OK
-#             data_v1 = response_v1.json()
-#
-#             final_url_v2 = config.get_endpoint("boxscore_v2", game_id=game[0])
-#             response_v2 = requests.get(final_url_v2)
-#             response_v2.raise_for_status()  # Ensure the response is OK
-#             data_v2 = response_v2.json()
-#
-#             game_obj = config.Game.get_game(game[0])
-#             success, game_results = process_boxscore(game_obj.game_id, data_v1, data_v2)
-#             if success:
-#                 save_game_results.append(game_results)
-#                 game_obj.update_game(game_results)
-#                 for i, team in enumerate(['awayTeam', 'homeTeam']):
-#                     position_data = data_v1['playerByGameStats'][team]
-#                     for position in ['forwards', 'defense', 'goalies']:
-#                         player_data = position_data[position]
-#                         for player in player_data:
-#                             if position != 'goalies':
-#                                 player_results = process_forward_defense_data(player)
-#                             else:
-#                                 player_results = process_goalie_data(player)
-#                             player_results['i'] = i
-#                             player_results['game'] = game
-#                             player_obj = config.Player.create_player(player_results['player_id'])
-#                             player_obj.update_player(game[0], game[1], game[3 - i], game[4], player_results)
-#                             save_player_results.append(player_results)
-#             else:
-#                 cwc = 0
-#         # Set the games in the config, assuming this modifies some shared state or configuration
-#         config.save_data(dimension_games, save_game_results)
-#         config.save_data(dimension_players, save_player_results)
 
 
 def process_game(game, config):
@@ -290,36 +190,34 @@ def get_boxscore_list(config):
     prior_data_games = config.load_data(dimension_games)
     prior_data_players = config.load_data(dimension_players)
 
-    # If there is prior data and we're not forcing a reload, update the objects.
     if prior_data_games and prior_data_players and not config.reload_boxscores:
         for game_results in prior_data_games:
             game_obj = config.Game.get_game(game_results['id'])
-            game_obj.update_game(game_results)
+            if game_obj and game_obj.game_date.date() < config.curr_date:
+                game_obj.update_game(game_results)
         for player_results in prior_data_players:
-            player_obj = config.Player.create_player(player_results['player_id'])
-            i = player_results['i']
-            game = player_results['game']
-            player_obj.update_player(game[0], game[1], game[3 - i], game[4], player_results)
+            if datetime.strptime(player_results['game'][1], "%Y-%m-%d").date() < config.curr_date:
+                player_obj = config.Player.create_player(player_results['player_id'])
+                i = player_results['i']
+                game = player_results['game']
+                player_obj.update_player(game[0], game[1], game[3 - i], game[4], player_results)
 
-    # If no prior data exists, or we must reload, process all games concurrently.
     if (prior_data_games is None) or config.reload_boxscores:
         save_game_results = []
         save_player_results = []
-        games = list(config.Game.get_games())
+        # Filter games to only include past games
+        games = [game for game in config.Game.get_games()
+                if game[1].date() < config.curr_date]
 
-        # Use a ThreadPoolExecutor to run per-game work in parallel.
         with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
-            # executor.map() preserves the order of the input iterable.
             results = list(executor.map(lambda game: process_game(game, config), games))
 
-        # Combine results in the same order as the input games.
         for game_result, player_result in results:
             if game_result:
                 save_game_results.extend(game_result)
             if player_result:
                 save_player_results.extend(player_result)
 
-        # Save the gathered results.
         config.save_data(dimension_games, save_game_results)
         config.save_data(dimension_players, save_player_results)
 
@@ -420,49 +318,6 @@ def process_boxscore(game_id, data_v1, data_v2):
     return True, results
 
 
-# def get_playbyplay_data(config):
-#     print(f'Gathering play by play data...')
-#     dimension_shifts = "all_shifts"
-#     dimension_plays = "all_plays"
-#     dimension_game_rosters = "all_game_rosters"
-#     prior_data_shifts = config.load_data(dimension_shifts)
-#     prior_data_plays = config.load_data(dimension_plays)
-#     prior_data_game_rosters = config.load_data(dimension_game_rosters)
-#     if prior_data_shifts and config.reload_playbyplay is False:
-#         for results in prior_data_plays:
-#             cwc = 0
-#     if (prior_data_shifts is None) or (config.reload_playbyplay is True):
-#         save_results_shifts = []
-#         save_results_plays = []
-#         save_results_game_rosters = []
-#         for game in config.Game.get_games():
-#             if game[1].date() >= config.curr_date:
-#                 continue
-#             print(f'Getting shift data for {game[0]}:{game[1]}:{game[2]}:{game[3]}')
-#             game_obj = config.Game.get_game(game[0])
-#             final_url = game_obj.playbyplay
-#             response = requests.get(final_url)
-#             response.raise_for_status()  # Ensure the response is OK
-#             soup = BeautifulSoup(response.text, 'html.parser')
-#             results_shifts = process_shifts(config, soup)
-#
-#             final_url_plays = config.get_endpoint("plays", game_id=game[0])
-#             response_plays = requests.get(final_url_plays)
-#             response_plays.raise_for_status()  # Ensure the response is OK
-#             data_plays = response_plays.json()
-#             results_plays = process_plays(data_plays)
-#             results_game_rosters = process_game_rosters(data_plays)
-#
-#             # game_obj = config.Game.get_game(game[0])
-#
-#             save_results_shifts.append(results_shifts)
-#             save_results_plays.append(results_plays)
-#             save_results_game_rosters.append(results_game_rosters)
-#             # game_obj.update_game(results)
-#         config.save_data(dimension_shifts, save_results_shifts)
-#         config.save_data(dimension_plays, save_results_plays)
-#         config.save_data(dimension_game_rosters, save_results_game_rosters)
-
 def internal_process_game(game, config):
     """
     Process a single game:
@@ -502,27 +357,22 @@ def get_playbyplay_data(config):
     prior_data_game_rosters = config.load_data(dimension_game_rosters)
 
     if prior_data_shifts and config.reload_playbyplay is False:
-        # Some processing if data is already available.
         for results in prior_data_plays:
             pass  # Your existing code logic
 
     if (prior_data_shifts is None) or (config.reload_playbyplay is True):
-        # Filter out games to process (as in your original code)
-        games = [game for game in config.Game.get_games() if game[1].date() < config.curr_date]
+        # Filter out future games before processing
+        games = [game for game in config.Game.get_games()
+                if game[1].date() < config.curr_date]
 
-        # Use ProcessPoolExecutor for parallel processing.
         with ProcessPoolExecutor(max_workers=config.max_workers) as executor:
-            # Use functools.partial to "fix" the config parameter.
             func = functools.partial(internal_process_game, config=config)
-            # executor.map returns results in the same order as the input.
             results = list(executor.map(func, games))
 
-        # Unpack the results into separate lists
         save_results_shifts = [result[0] for result in results]
         save_results_plays = [result[1] for result in results]
         save_results_game_rosters = [result[2] for result in results]
 
-        # Save the processed data
         config.save_data(dimension_shifts, save_results_shifts)
         config.save_data(dimension_plays, save_results_plays)
         config.save_data(dimension_game_rosters, save_results_game_rosters)

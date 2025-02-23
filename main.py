@@ -29,7 +29,6 @@ def main():
     # model, metrics = gnn(config, config_model)
 
 
-
 def get_data(config):
     get_season_data(config)
     get_team_list(config)
