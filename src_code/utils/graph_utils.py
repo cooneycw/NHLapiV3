@@ -961,37 +961,32 @@ def process_single_game(subgraph_data, config):
     return updates
 
 
+def process_game(game_info, config, data_graph):
+    """Worker function that must be at module level for pickling."""
+    subgraph_data = get_subgraph_dict(data_graph, game_info, config)
+    return process_single_game(subgraph_data, config)
+
+
 def calculate_historical_stats(config, data_graph):
-    """Multiprocessing version using pre-extracted subgraph data."""
+    """Multiprocessing version using partial for non-serializable config."""
     sorted_games = data_graph.graph['sorted_games']
     total_games = len(sorted_games)
 
-    def process_chunk(games_chunk):
-        with Pool(processes=config.max_workers) as pool:
-            chunk_results = []
-            for game_info in games_chunk:
-                # Extract subgraph data
-                subgraph_data = get_subgraph_dict(data_graph, game_info, config)
-                # Process game with minimal data
-                result = pool.apply_async(process_single_game, (subgraph_data, config))
-                chunk_results.append(result)
-
-            # Get results
-            return [r.get() for r in chunk_results]
-
-    # Process in chunks to control memory usage
-    chunk_size = config.max_workers  # Adjust based on available memory
+    chunk_size = config.max_workers
     results = []
 
-    for i in range(0, total_games, chunk_size):
-        chunk = sorted_games[i:i + chunk_size]
-        print(f"Processing games {i} to {min(i + chunk_size, total_games)} of {total_games} ({( min(i + chunk_size, total_games) / total_games) * 100:.1f}%)")
+    with Pool(processes=config.max_workers) as pool:
+        worker = partial(process_game, config=config, data_graph=data_graph)
 
-        chunk_results = process_chunk(chunk)
-        results.extend(chunk_results)
+        for i in range(0, total_games, chunk_size):
+            chunk = sorted_games[i:i + chunk_size]
+            print(f"Processing games {i} to {min(i + chunk_size, total_games)} "
+                  f"of {total_games} "
+                  f"({(min(i + chunk_size, total_games) / total_games) * 100:.1f}%)")
 
-        # Force garbage collection after each chunk
-        gc.collect()
+            chunk_results = pool.map(worker, chunk)
+            results.extend(chunk_results)
+            gc.collect()  # Clean up after each chunk
 
     # Apply all updates to the original graph
     for result in results:
