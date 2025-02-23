@@ -889,9 +889,8 @@ def process_single_game(subgraph_data, config):
     for team_id in [home_team, away_team]:
         team_tgp = f"{game_id}_{team_id}"
         current_pgps = [
-            node for node in subgraph.neighbors(team_tgp)
-            if isinstance(node, str) and
-               subgraph.nodes[node].get('type') == 'player_game_performance'
+            node for node in subgraph.nodes
+            if subgraph.nodes[node].get('type') == 'player_game_performance'
         ]
 
         # Initialize updates for team TGP node
