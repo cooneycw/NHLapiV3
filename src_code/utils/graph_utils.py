@@ -535,10 +535,7 @@ def get_historical_tgp_stats(graph, team_id, current_game_id, stat_attributes, n
     # Filter and sort relevant games
     previous_games = [
         game for game in team_games
-        if game['game_id'] != current_game_id and
-           (isinstance(game['date'], str) and
-            datetime.strptime(game['date'], '%Y-%m-%d') < current_game_date or
-            game['date'] < current_game_date)
+        if game['game_id'] != current_game_id and game['date'] < current_game_date
     ]
     previous_games.sort(key=lambda x: x['date'], reverse=True)
 
@@ -581,12 +578,11 @@ def get_historical_pgp_stats(graph, team_id, current_game_id, stat_attributes, n
         n_games: Number of previous games to include
 
     Returns:
-        tuple: (stats dictionary, games_played dictionary) where stats contains the averaged stats
-        and games_played contains the count of games used for each player's calculation
+        tuple: (stats dictionary, games_played dictionary) where:
+               - stats contains the averaged stats per player
+               - games_played contains the count of games used for each player
     """
     current_game_date = graph.nodes[current_game_id]['game_date']
-    if isinstance(current_game_date, str):
-        current_game_date = datetime.strptime(current_game_date, '%Y-%m-%d')
 
     # Get team's games from the index
     team_games = graph.graph['team_games'].get(team_id, [])
@@ -594,10 +590,7 @@ def get_historical_pgp_stats(graph, team_id, current_game_id, stat_attributes, n
     # Filter and sort relevant games
     previous_games = [
         game for game in team_games
-        if game['game_id'] != current_game_id and
-           (isinstance(game['date'], str) and
-            datetime.strptime(game['date'], '%Y-%m-%d') < current_game_date or
-            game['date'] < current_game_date)
+        if game['game_id'] != current_game_id and game['date'] < current_game_date
     ]
     previous_games.sort(key=lambda x: x['date'], reverse=True)
     recent_games = previous_games[:n_games]
@@ -605,65 +598,50 @@ def get_historical_pgp_stats(graph, team_id, current_game_id, stat_attributes, n
     if not recent_games:
         return None, None
 
+    # Initialize data structures
     player_stats = defaultdict(lambda: {attr: [0, 0, 0] for attr in stat_attributes['player_stats']})
     player_games = defaultdict(int)
-    player_date_ranges = defaultdict(lambda: {'first_game': None, 'last_game': None})
 
     # Process each recent game
     for game in recent_games:
         game_id = game['game_id']
-        game_date = game['date']
 
         # Find PGP nodes for this game and team efficiently using TGP connection
         team_tgp = f"{game_id}_{team_id}"
         pgp_nodes = [
-            node for node in graph.neighbors(team_tgp)
-            if isinstance(node, str)
-               and graph.nodes[node].get('type') == 'player_game_performance'
+            node for node in graph.nodes
+            if graph.nodes[node].get('type') == 'player_game_performance'
         ]
 
         # Process each PGP node
         for pgp in pgp_nodes:
             node_data = graph.nodes[pgp]
-            player_id = None
+            node_parts = pgp.split('_')
+            player_id = int(node_parts[1])
 
-            # Find player ID from neighbors
-            for neighbor in graph.neighbors(pgp):
-                if graph.nodes[neighbor].get('type') == 'player':
-                    player_id = neighbor
-                    break
 
-            if player_id:
-                player_games[player_id] += 1
+            player_games[player_id] += 1
 
-                # Update date range
-                if player_date_ranges[player_id]['first_game'] is None or game_date < player_date_ranges[player_id][
-                    'first_game']:
-                    player_date_ranges[player_id]['first_game'] = game_date
-                if player_date_ranges[player_id]['last_game'] is None or game_date > player_date_ranges[player_id][
-                    'last_game']:
-                    player_date_ranges[player_id]['last_game'] = game_date
+            # Aggregate stats
+            for stat_name in stat_attributes['player_stats']:
+                if stat_name in node_data:
+                    player_stats[player_id][stat_name] = [
+                        player_stats[player_id][stat_name][i] + node_data[stat_name][i]
+                        for i in range(3)
+                    ]
 
-                # Aggregate stats
-                for stat_name in stat_attributes['player_stats']:
-                    if stat_name in node_data:
-                        player_stats[player_id][stat_name] = [
-                            player_stats[player_id][stat_name][i] + node_data[stat_name][i]
-                            for i in range(3)
-                        ]
-
-    # Calculate averages and include metadata
+    # Calculate averages
     stats = {}
     for player, stats_dict in player_stats.items():
-        player_avg_stats = {
-            k: [v[i] / player_games[player] for i in range(3)]
-            for k, v in stats_dict.items()
-        }
-        player_avg_stats['games_played'] = player_games[player]
-        player_avg_stats['date_range'] = player_date_ranges[player]
-        stats[player] = player_avg_stats
+        games = player_games[player]
+        if games > 0:  # Protect against division by zero
+            player_avg_stats = {
+                k: [v[i] / games for i in range(3)]
+                for k, v in stats_dict.items()
+            }
+            stats[player] = player_avg_stats
 
-    return stats
+    return stats, player_games
 
 
 def get_historical_pgp_edge_stats(graph, team_id, current_game_id, stat_attributes, n_games):
@@ -678,7 +656,9 @@ def get_historical_pgp_edge_stats(graph, team_id, current_game_id, stat_attribut
         n_games: Number of previous games to include
 
     Returns:
-        dict: Dictionary containing pair stats, including games played and date ranges
+        tuple: (stats dictionary, pair_games dictionary) where:
+               - stats contains the averaged stats per player pair
+               - pair_games contains the count of games for each player pair
     """
     current_game_date = graph.nodes[current_game_id]['game_date']
     if isinstance(current_game_date, str):
@@ -690,96 +670,85 @@ def get_historical_pgp_edge_stats(graph, team_id, current_game_id, stat_attribut
     # Filter and sort relevant games
     previous_games = [
         game for game in team_games
-        if game['game_id'] != current_game_id and
-           (isinstance(game['date'], str) and
-            datetime.strptime(game['date'], '%Y-%m-%d') < current_game_date or
-            game['date'] < current_game_date)
+        if game['game_id'] != current_game_id and game['date'] < current_game_date
     ]
     previous_games.sort(key=lambda x: x['date'], reverse=True)
     recent_games = previous_games[:n_games]
 
     if not recent_games:
-        return None
+        return None, None
 
+    # Initialize data structures
     pair_stats = defaultdict(lambda: {attr: [0, 0, 0] for attr in stat_attributes['player_pair_stats']})
     pair_games = defaultdict(int)
-    pair_date_ranges = defaultdict(lambda: {'first_game': None, 'last_game': None})
-
-    # Cache structure to store player ID mappings
-    player_id_cache = {}
 
     # Process each recent game
     for game in recent_games:
         game_id = game['game_id']
-        game_date = game['date']
 
-        # Find PGP nodes for this game and team efficiently using TGP connection
+        # Find TGP node for this game and team
         team_tgp = f"{game_id}_{team_id}"
-        player_pgps = [
-            node for node in graph.neighbors(team_tgp)
-            if isinstance(node, str)
-               and graph.nodes[node].get('type') == 'player_game_performance'
-        ]
 
-        # Build player ID cache for this game's PGPs
-        for pgp in player_pgps:
-            if pgp not in player_id_cache:
-                for neighbor in graph.neighbors(pgp):
-                    if graph.nodes[neighbor].get('type') == 'player':
-                        player_id_cache[pgp] = neighbor
-                        break
+        # Find PGP nodes for this game and team using TGP connection
+        player_pgps = [
+            node for node in graph.nodes
+            if graph.nodes[node].get('type') == 'player_game_performance'
+        ]
 
         # Process player pairs
         for i in range(len(player_pgps)):
             for j in range(i + 1, len(player_pgps)):
                 pgp1, pgp2 = player_pgps[i], player_pgps[j]
+
+                # Extract player IDs directly from the PGP nodes
+                # PGP format is "game_id_player_id"
+                player1_id = int(pgp1.split('_')[1])
+                player2_id = int(pgp2.split('_')[1])
+
                 if graph.has_edge(pgp1, pgp2):
-                    player1_id = player_id_cache.get(pgp1)
-                    player2_id = player_id_cache.get(pgp2)
+                    pair_key = tuple(sorted([player1_id, player2_id]))
+                    pair_games[pair_key] += 1
 
-                    if player1_id and player2_id:
-                        pair_key = tuple(sorted([player1_id, player2_id]))
-                        pair_games[pair_key] += 1
+                    # Aggregate edge stats
+                    edge_data = graph[pgp1][pgp2]
+                    for stat_name in stat_attributes['player_pair_stats']:
+                        if stat_name in edge_data:
+                            pair_stats[pair_key][stat_name] = [
+                                pair_stats[pair_key][stat_name][i] + edge_data[stat_name][i]
+                                for i in range(3)
+                            ]
 
-                        # Update date range
-                        if pair_date_ranges[pair_key]['first_game'] is None or game_date < pair_date_ranges[pair_key][
-                            'first_game']:
-                            pair_date_ranges[pair_key]['first_game'] = game_date
-                        if pair_date_ranges[pair_key]['last_game'] is None or game_date > pair_date_ranges[pair_key][
-                            'last_game']:
-                            pair_date_ranges[pair_key]['last_game'] = game_date
-
-                        # Aggregate edge stats
-                        edge_data = graph[pgp1][pgp2]
-                        for stat_name in stat_attributes['player_pair_stats']:
-                            if stat_name in edge_data:
-                                pair_stats[pair_key][stat_name] = [
-                                    pair_stats[pair_key][stat_name][i] + edge_data[stat_name][i]
-                                    for i in range(3)
-                                ]
-
-    # Calculate averages and include metadata
+    # Calculate averages
     stats = {}
     for pair, stats_dict in pair_stats.items():
-        pair_avg_stats = {
-            k: [v[i] / pair_games[pair] for i in range(3)]
-            for k, v in stats_dict.items()
-        }
-        pair_avg_stats['games_played'] = pair_games[pair]
-        pair_avg_stats['date_range'] = pair_date_ranges[pair]
-        stats[pair] = pair_avg_stats
+        games = pair_games[pair]
+        if games > 0:  # Protect against division by zero
+            pair_avg_stats = {
+                k: [v[i] / games for i in range(3)]
+                for k, v in stats_dict.items()
+            }
+            stats[pair] = pair_avg_stats
 
-    return stats
+    return stats, pair_games
 
 
 def get_subgraph_dict(data_graph, game_info, config):
-    """Extract minimal subgraph data needed for historical calculations of a game."""
+    """
+    Extract minimal subgraph data needed for historical calculations of a game.
+
+    Args:
+        data_graph: The full NetworkX graph
+        game_info: Dictionary containing game metadata
+        config: Configuration object containing window sizes
+
+    Returns:
+        Dictionary containing subgraph data including nodes, edges, and team games
+    """
     game_id = game_info['game_id']
     game_date = game_info['date']
     home_team = game_info['home_team']
     away_team = game_info['away_team']
 
-    # Get all games before this one for both teams
     subgraph_nodes = {}
     subgraph_edges = {}
 
@@ -788,7 +757,35 @@ def get_subgraph_dict(data_graph, game_info, config):
     subgraph_nodes[f"{game_id}_{home_team}"] = dict(data_graph.nodes[f"{game_id}_{home_team}"])
     subgraph_nodes[f"{game_id}_{away_team}"] = dict(data_graph.nodes[f"{game_id}_{away_team}"])
 
-    # For both teams, get historical games within window
+    # Add current game's PGP nodes first to ensure they're included
+    for team_id in [home_team, away_team]:
+        tgp_node = f"{game_id}_{team_id}"
+        current_pgps = [
+            node for node in data_graph.neighbors(tgp_node)
+            if isinstance(node, str) and
+               data_graph.nodes[node].get('type') == 'player_game_performance'
+        ]
+
+        # Add current PGP nodes and their connections
+        for pgp in current_pgps:
+            subgraph_nodes[pgp] = dict(data_graph.nodes[pgp])
+
+            # Add player nodes
+            player_nodes = [
+                node for node in data_graph.neighbors(pgp)
+                if data_graph.nodes[node].get('type') == 'player'
+            ]
+            for player in player_nodes:
+                subgraph_nodes[player] = dict(data_graph.nodes[player])
+
+            # Add edges between current PGPs
+            for i, pgp1 in enumerate(current_pgps):
+                for pgp2 in current_pgps[i + 1:]:
+                    if data_graph.has_edge(pgp1, pgp2):
+                        edge_key = tuple(sorted([pgp1, pgp2]))
+                        subgraph_edges[edge_key] = dict(data_graph.get_edge_data(*edge_key))
+
+    # Get historical games within max window for both teams
     max_window = max(config.stat_window_sizes)
     relevant_team_games = {team_id: [] for team_id in [home_team, away_team]}
 
@@ -809,22 +806,22 @@ def get_subgraph_dict(data_graph, game_info, config):
         relevant_games = historical_games[:max_window]
         relevant_team_games[team_id] = relevant_games
 
+        # Add historical game nodes and their connections
         for game in relevant_games:
-            # Add game node and TGP node with attributes
             hist_game_id = game['game_id']
             tgp_node = game['tgp_node']
 
             subgraph_nodes[hist_game_id] = dict(data_graph.nodes[hist_game_id])
             subgraph_nodes[tgp_node] = dict(data_graph.nodes[tgp_node])
 
-            # Add PGP nodes connected to this TGP
+            # Get historical PGP nodes
             pgp_nodes = [
                 node for node in data_graph.neighbors(tgp_node)
                 if isinstance(node, str) and
                    data_graph.nodes[node].get('type') == 'player_game_performance'
             ]
 
-            # Add PGP nodes and their player connections with attributes
+            # Add historical PGP nodes and their connections
             for pgp in pgp_nodes:
                 subgraph_nodes[pgp] = dict(data_graph.nodes[pgp])
 
@@ -836,39 +833,13 @@ def get_subgraph_dict(data_graph, game_info, config):
                 for player in player_nodes:
                     subgraph_nodes[player] = dict(data_graph.nodes[player])
 
-                # Add edges between PGPs
+                # Add edges between historical PGPs
                 for i, pgp1 in enumerate(pgp_nodes):
                     for pgp2 in pgp_nodes[i + 1:]:
                         if data_graph.has_edge(pgp1, pgp2):
                             edge_key = tuple(sorted([pgp1, pgp2]))
-                            subgraph_edges[edge_key] = dict(data_graph.get_edge_data(*edge_key))
-
-    # Add current game's PGP nodes and their connections
-    for team_id in [home_team, away_team]:
-        tgp_node = f"{game_id}_{team_id}"
-        current_pgps = [
-            node for node in data_graph.neighbors(tgp_node)
-            if isinstance(node, str) and
-               data_graph.nodes[node].get('type') == 'player_game_performance'
-        ]
-
-        for pgp in current_pgps:
-            subgraph_nodes[pgp] = dict(data_graph.nodes[pgp])
-
-            # Add player nodes
-            player_nodes = [
-                node for node in data_graph.neighbors(pgp)
-                if data_graph.nodes[node].get('type') == 'player'
-            ]
-            for player in player_nodes:
-                subgraph_nodes[player] = dict(data_graph.nodes[player])
-
-            # Add edges between current PGPs
-            for i, pgp1 in enumerate(current_pgps):
-                for pgp2 in current_pgps[i + 1:]:
-                    if data_graph.has_edge(pgp1, pgp2):
-                        edge_key = tuple(sorted([pgp1, pgp2]))
-                        subgraph_edges[edge_key] = dict(data_graph.get_edge_data(*edge_key))
+                            if edge_key not in subgraph_edges:  # Avoid overwriting existing edges
+                                subgraph_edges[edge_key] = dict(data_graph.get_edge_data(*edge_key))
 
     return {
         'nodes': subgraph_nodes,
@@ -879,7 +850,16 @@ def get_subgraph_dict(data_graph, game_info, config):
 
 
 def process_single_game(subgraph_data, config):
-    """Process historical statistics for a single game using subgraph data."""
+    """
+    Process historical statistics for a single game using subgraph data.
+
+    Args:
+        subgraph_data: Dictionary containing subgraph information
+        config: Configuration object containing window sizes and stat attributes
+
+    Returns:
+        Dictionary containing updates for nodes and edges
+    """
     # Reconstruct subgraph from dictionary data
     subgraph = nx.Graph()
 
@@ -899,89 +879,85 @@ def process_single_game(subgraph_data, config):
     home_team = game_info['home_team']
     away_team = game_info['away_team']
 
-    # Process historical stats using subgraph
+    # Initialize updates dictionary
     updates = {
         'nodes': {},
         'edges': {}
     }
 
-    # Process team stats
+    # Process historical stats for both teams
     for team_id in [home_team, away_team]:
         team_tgp = f"{game_id}_{team_id}"
+        current_pgps = [
+            node for node in subgraph.neighbors(team_tgp)
+            if isinstance(node, str) and
+               subgraph.nodes[node].get('type') == 'player_game_performance'
+        ]
+
+        # Initialize updates for team TGP node
         updates['nodes'][team_tgp] = {}
 
+        # Process stats for each window size
         for window in config.stat_window_sizes:
-            # Process team stats
-            hist_stats, actual_games = get_historical_tgp_stats(
+            # 1. Process team stats
+            team_stats, team_game_count = get_historical_tgp_stats(
                 subgraph, team_id, game_id, config.stat_attributes, window
             )
 
-            if hist_stats:
-                updates['nodes'][team_tgp][f'hist_{window}_game_count'] = actual_games
-                for stat_name, values in hist_stats.items():
+            if team_stats:
+                updates['nodes'][team_tgp][f'hist_{window}_game_count'] = team_game_count
+                for stat_name, values in team_stats.items():
                     hist_name = f'hist_{window}_{stat_name}'
                     updates['nodes'][team_tgp][hist_name] = values
 
-            # Process player stats
-            player_stats = get_historical_pgp_stats(
+            # 2. Process player stats
+            player_stats, player_game_counts = get_historical_pgp_stats(
                 subgraph, team_id, game_id, config.stat_attributes, window
             )
 
             if player_stats:
-                # Get current game's PGP nodes for this team
-                team_tgp = f"{game_id}_{team_id}"
-                current_pgps = [
-                    node for node in subgraph.neighbors(team_tgp)
-                    if isinstance(node, str) and
-                       subgraph.nodes[node].get('type') == 'player_game_performance'
-                ]
-
-                # Update each player's PGP node
                 for pgp in current_pgps:
-                    player_id = None
-                    for neighbor in subgraph.neighbors(pgp):
-                        if subgraph.nodes[neighbor].get('type') == 'player':
-                            player_id = neighbor
-                            break
+                    # Extract player ID directly from PGP node (format: "game_id_player_id")
+                    player_id = int(pgp.split('_')[1])
 
-                    if player_id and player_id in player_stats:
+                    if player_id in player_stats:
                         if pgp not in updates['nodes']:
                             updates['nodes'][pgp] = {}
+
+                        # Add game count
+                        updates['nodes'][pgp][f'hist_{window}_game_count'] = player_game_counts[player_id]
+
+                        # Add stats
                         for stat_name, values in player_stats[player_id].items():
                             hist_name = f'hist_{window}_{stat_name}'
                             updates['nodes'][pgp][hist_name] = values
 
-            # Process player-pair stats
-            pair_stats = get_historical_pgp_edge_stats(
+            # 3. Process player-pair stats
+            pair_stats, pair_game_counts = get_historical_pgp_edge_stats(
                 subgraph, team_id, game_id, config.stat_attributes, window
             )
 
             if pair_stats:
-                # Get current game's PGP nodes for this team
                 for i, pgp1 in enumerate(current_pgps):
                     for pgp2 in current_pgps[i + 1:]:
                         if subgraph.has_edge(pgp1, pgp2):
-                            # Get player IDs for both PGPs
-                            player1_id = None
-                            player2_id = None
-                            for neighbor in subgraph.neighbors(pgp1):
-                                if subgraph.nodes[neighbor].get('type') == 'player':
-                                    player1_id = neighbor
-                                    break
-                            for neighbor in subgraph.neighbors(pgp2):
-                                if subgraph.nodes[neighbor].get('type') == 'player':
-                                    player2_id = neighbor
-                                    break
+                            # Extract player IDs directly from PGP nodes
+                            player1_id = int(pgp1.split('_')[1])
+                            player2_id = int(pgp2.split('_')[1])
 
-                            if player1_id and player2_id:
-                                pair_key = tuple(sorted([player1_id, player2_id]))
-                                if pair_key in pair_stats:
-                                    edge_key = tuple(sorted([pgp1, pgp2]))
-                                    if edge_key not in updates['edges']:
-                                        updates['edges'][edge_key] = {}
-                                    for stat_name, values in pair_stats[pair_key].items():
-                                        hist_name = f'hist_{window}_{stat_name}'
-                                        updates['edges'][edge_key][hist_name] = values
+                            pair_key = tuple(sorted([player1_id, player2_id]))
+                            if pair_key in pair_stats:
+                                edge_key = tuple(sorted([pgp1, pgp2]))
+                                if edge_key not in updates['edges']:
+                                    updates['edges'][edge_key] = {}
+
+                                # Add game count
+                                updates['edges'][edge_key][f'hist_{window}_game_count'] = pair_game_counts[pair_key]
+
+                                # Add stats
+                                for stat_name, values in pair_stats[pair_key].items():
+                                    hist_name = f'hist_{window}_{stat_name}'
+                                    updates['edges'][edge_key][hist_name] = values
 
     return updates
 
