@@ -851,7 +851,7 @@ def process_stoppage(event, period_code, compare_shift, away_players, home_playe
                                  'chlg-hm-missed-stoppage', 'home-timeout', 'clock-problem',
                                  'puck-in-penalty-benches', 'ice-problem', 'net-dislodged-by-goaltender',
                                  'rink-repair', 'official-injury', 'premature-substitution', 'chlg-league-off-side',
-                                 'switch-sides']:
+                                 'switch-sides', 'chlg-hm-puck-over-glass']:
             pass  # data lacks detail to specify which goalie / team
         else:
             print(f'away stoppage reason: {event["stoppage"]}')
@@ -873,7 +873,7 @@ def process_stoppage(event, period_code, compare_shift, away_players, home_playe
                                  'chlg-hm-missed-stoppage', 'home-timeout', 'clock-problem',
                                  'puck-in-penalty-benches', 'ice-problem', 'net-dislodged-by-goaltender',
                                  'rink-repair', 'official-injury', 'premature-substitution', 'chlg-league-off-side',
-                                 'switch-sides']:
+                                 'switch-sides', 'chlg-hm-puck-over-glass']:
             pass  # data lacks detail to specify which goalie / team
         else:
              print(f'home stoppage reason: {event["stoppage"]}')

@@ -6,6 +6,7 @@ from src_code.utils.graph_utils import (
     get_historical_pgp_edge_stats, calculate_historical_stats)
 from src_code.utils.summary_utils import update_game_nodes
 from src_code.utils.display_graph_utils import visualize_game_graph
+from src_code.utils.save_graph_utils import save_graph
 import copy
 
 
@@ -49,8 +50,8 @@ def model_data(config):
 
     for m, game in enumerate(data_games):
         verbose = False
-        if (m % 10 == 0) and (m != 0):
-            print(f'game {m} of {len(data_games)}')
+        if (m % 40 == 0) and (m != 0):
+            print(f'game {m} of {len(data_games)} {(m / len(data_games)) * 100:.1f}%)')
             verbose = True
         # show_single_game_trimmed(data_graph, game['id'])
         shift_data = load_game_data(config.file_paths["game_output_pkl"] + f'{str(game["id"])}')
@@ -75,14 +76,34 @@ def model_data(config):
         #     )
 
         # Create visualization after all game data is processed and updated
-        if m % 10 == 0:
-            visualize_game_graph(data_graph, game['id'],
-                                 output_path=f"{config.file_paths['game_output_jpg']}/game_{game['id']}_network_{game['game_date']}.jpg")
+        # if m % 10 == 0:
+        #     visualize_game_graph(data_graph, game['id'],
+        #                          output_path=f"{config.file_paths['game_output_jpg']}/game_{game['id']}_network_{game['game_date']}.jpg")
 
     # After ALL games are processed, calculate historical stats
     print(f"processing historic game stats...")
     calculate_historical_stats(config, data_graph)
-    cwc = 0
+    save_graph(data_graph, config.file_paths["graph"])
+
+    print("Generating visualizations...")
+    for m, game in enumerate(data_games):
+        # Create visualization for every 10th game or the last game
+        if m % 10 == 0 or m == len(data_games) - 1:
+            print(f'Generating visualization for game {game["id"]}')
+
+            # Generate visualizations for different window sizes
+            for window_size in config.stat_window_sizes:
+                output_path = (f"{config.file_paths['game_output_jpg']}/game_{game['id']}_"
+                               f"network_{game['game_date']}_window{window_size}.jpg")
+
+                visualize_game_graph(
+                    data_graph,
+                    game['id'],
+                    window_size=window_size,
+                    output_path=output_path,
+                    edge_sample_rate=0.05,
+
+                )
 
 
 def process_shift_data(data_graph, verbose, team_game_map, shift_data):
@@ -105,8 +126,6 @@ def process_shift_data(data_graph, verbose, team_game_map, shift_data):
 
 
     for i, shift in enumerate(shift_id):
-        if (i % 100 == 0) and (i != 0) and verbose == True:
-            print(f'{i} of {len(shift_id)}')
         # one per shift
         team_map = {}
         line_player_team_map = {}

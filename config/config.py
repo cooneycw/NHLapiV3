@@ -1,6 +1,5 @@
 import os
 import pickle
-
 from config.playbyplay import PlayByPlay
 from config.season import Season
 from config.team import Team
@@ -13,9 +12,11 @@ class Config:
     def __init__(self, input_dict):
         self.verbose = input_dict['verbose']
         self.produce_csv = input_dict['produce_csv']
+        self.stat_window_sizes = [5]
         # self.curr_date = datetime.now().date()
-        self.curr_date = datetime(2024, 11, 6).date()
-        self.max_workers = 30
+        self.split_data = datetime(2024, 12, 1).date()
+        self.curr_date = datetime(2025, 2, 1).date()
+        self.max_workers = 36
         self.base_url = "https://api-web.nhle.com"
         self.base_url_lines = "https://www.dailyfaceoff.com"
         self.headers_lines = {
@@ -48,6 +49,7 @@ class Config:
             "game_output_pkl": os.path.join(self.current_path, "storage", "output", "pkl", "game_output"),
             "game_output_jpg": os.path.join(self.current_path, "storage", "output", "jpg"),
             "summary_excel": os.path.join(self.current_path, "storage", "output", "excel", "summary_excel"),
+            "graph": os.path.join(self.current_path, "storage", "output", "graph", "graph"),
         }
 
         self.days_list = input_dict.get("days_list", None)
@@ -73,7 +75,6 @@ class Config:
         self.lines = None
         self.event_categ = self.event_registry()
         self.shift_categ = self.shift_registry()
-        self.stat_window_sizes = [5, 20, 50, 150]
         self.stat_attributes = {
             'team_stats': [
                 'win', 'loss', 'faceoff_taken', 'faceoff_won', 'shot_attempt', 'shot_missed',
