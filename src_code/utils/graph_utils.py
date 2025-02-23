@@ -780,7 +780,7 @@ def process_single_game(game_info, config, graph_dict):
     away_team = game_info['away_team']
 
     # Create a local graph from the dictionary
-    data_graph = nx.node_link_graph(graph_dict)
+    data_graph = nx.node_link_graph(graph_dict, edges="links")
 
     # Local updates dictionary
     updates = {
@@ -884,7 +884,7 @@ def calculate_historical_stats(config, data_graph):
     total_games = len(sorted_games)
 
     # Convert graph to dictionary format for sharing between processes
-    graph_dict = nx.node_link_data(data_graph)
+    graph_dict = nx.node_link_data(data_graph, edges="links")
 
     # Create a Pool of workers
     with Pool(processes=config.max_workers) as pool:
@@ -910,4 +910,3 @@ def calculate_historical_stats(config, data_graph):
             edge_data.update(attrs)
 
     return data_graph
-
