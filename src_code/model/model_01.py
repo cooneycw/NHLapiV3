@@ -51,7 +51,7 @@ def model_data(config):
     for m, game in enumerate(data_games):
         verbose = False
         if (m % 40 == 0) and (m != 0):
-            print(f'game {m} of {len(data_games)} {(m / len(data_games)) * 100:.1f}%)')
+            print(f'game {m} of {len(data_games)} ({(m / len(data_games)) * 100:.1f}%)')
             verbose = True
         # show_single_game_trimmed(data_graph, game['id'])
         shift_data = load_game_data(config.file_paths["game_output_pkl"] + f'{str(game["id"])}')
