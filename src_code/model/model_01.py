@@ -6,7 +6,7 @@ from src_code.utils.graph_utils import (
     get_historical_pgp_edge_stats, calculate_historical_stats)
 from src_code.utils.summary_utils import update_game_nodes
 from src_code.utils.display_graph_utils import visualize_game_graph
-from src_code.utils.save_graph_utils import save_graph
+from src_code.utils.save_graph_utils import save_graph, load_graph
 import copy
 
 
@@ -82,9 +82,14 @@ def model_data(config):
 
     # After ALL games are processed, calculate historical stats
     print(f"processing historic game stats...")
-    calculate_historical_stats(config, data_graph)
+    data_graph = calculate_historical_stats(config, data_graph)
     save_graph(data_graph, config.file_paths["graph"])
 
+
+def model_visualization(config):
+    data_graph = load_graph(config.file_paths["graph"])
+    dimension_games = "all_boxscores"
+    data_games = config.load_data(dimension_games)
     print("Generating visualizations...")
     for m, game in enumerate(data_games):
         # Create visualization for every 10th game or the last game

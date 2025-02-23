@@ -478,7 +478,7 @@ def internal_process_game(game, config):
     response = requests.get(final_url)
     response.raise_for_status()  # Ensure the response is OK
     soup = BeautifulSoup(response.text, 'html.parser')
-    results_shifts = process_shifts(config, soup)
+    results_shifts = process_shifts(config, game, soup)
 
     # Process plays and game rosters
     final_url_plays = config.get_endpoint("plays", game_id=game[0])
@@ -528,8 +528,8 @@ def get_playbyplay_data(config):
         config.save_data(dimension_game_rosters, save_results_game_rosters)
 
 
-def process_shifts(config, soup):
-    print(f'Gathering player names...')
+def process_shifts(config, game, soup):
+    print(f'Gathering player names for {game[0]}:{game[1]}:{game[2]}:{game[3]}')
     shifts = []
     pages = soup.find_all('div', class_='page')
 

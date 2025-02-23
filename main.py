@@ -2,7 +2,7 @@ from config.config import Config
 from config.config_model import ConfigModel
 from src_code.collect.collect_01 import get_season_data, get_team_list, get_game_list, get_boxscore_list, get_playbyplay_data, get_player_names
 from src_code.curate.curate_01 import curate_data
-from src_code.model.model_01 import model_data
+from src_code.model.model_01 import model_data, model_visualization
 from src_code.model.model_02 import gnn
 
 
@@ -22,9 +22,10 @@ def main():
     }
     config = Config(config_dict)
     config_model = ConfigModel()
-    # get_data(config)
-    # curate_data(config)
+    get_data(config)
+    curate_data(config)
     model_data(config)
+    model_visualization(config)
     # model, metrics = gnn(config, config_model)
 
 
