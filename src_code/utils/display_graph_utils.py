@@ -107,13 +107,21 @@ def visualize_game_graph(data_graph, game_id, window_size=10, output_path=None, 
                 goals = edge_data.get('goal', [0, 0, 0])
                 toi = edge_data.get('toi', [0, 0, 0])
 
-                hist_goals = edge_data.get(f'hist_{window_size}_goal', [0, 0, 0])
-                hist_toi = edge_data.get(f'hist_{window_size}_toi', [0, 0, 0])
-                games_played = edge_data.get(f'hist_{window_size}_games_played', 0)
+                # Get games played count for context
+                games_played = edge_data.get(f'hist_{window_size}_games_played', [0, 0, 0])
 
+                # Get historical stats (assuming these are now stored as averages)
+                hist_goal = edge_data.get(f'hist_{window_size}_goal', [0, 0, 0])
+                hist_toi = edge_data.get(f'hist_{window_size}_toi', [0, 0, 0])
+
+                # Current game info
                 label = f'Current - G:{goals}\nTOI:{toi}'
-                if games_played > 0:
-                    label += f'\nHist({games_played}g)\nG:{hist_goals}\nTOI:{hist_toi}'
+
+                # Historical stats (implicitly averages)
+                if sum(games_played) > 0:
+                    label += f'\nHist(Reg:{games_played[0]}/OT:{games_played[1]}/SO:{games_played[2]})\n'
+                    label += f'G:{[round(x, 2) for x in hist_goal]}\nTOI:{[round(x, 2) for x in hist_toi]}'
+
                 edge_labels[(u, v)] = label
 
         nx.draw_networkx_edge_labels(game_subgraph, pos,
@@ -138,14 +146,16 @@ def visualize_game_graph(data_graph, game_id, window_size=10, output_path=None, 
                 if stat in node_data:
                     label += f"\n{stat}: {node_data[stat]}"
 
-            # Historical stats - raw format
-            hist_games = node_data.get(f'hist_{window_size}_games_played')
+            # Historical stats
+            hist_games = node_data.get(f'hist_{window_size}_game_count')
             if hist_games:
-                label += f"\n\nHistorical ({hist_games} games):"
-                for stat in ['toi', 'goal', 'goal_against', 'assist', 'point', 'faceoff_won']:
+                label += f"\n\nHistorical (Reg:{hist_games[0]}/OT:{hist_games[1]}/SO:{hist_games[2]}):"
+
+                # Include key stats (now just averages without the _avg suffix)
+                for stat in ['toi', 'goal', 'goal_against', 'assist', 'point', 'faceoff_won', 'shot_on_goal']:
                     hist_stat = node_data.get(f'hist_{window_size}_{stat}')
                     if hist_stat:
-                        label += f"\n{stat}: {hist_stat}"
+                        label += f"\n{stat}: {[round(x, 2) for x in hist_stat]}"
 
         elif node_data.get('type') == 'team_game_performance':
             current_stats = [
@@ -161,14 +171,16 @@ def visualize_game_graph(data_graph, game_id, window_size=10, output_path=None, 
                 if stat in node_data:
                     label += f"\n{stat}: {node_data[stat]}"
 
-                    # Historical team stats - raw format
+            # Historical team stats
             hist_games = node_data.get(f'hist_{window_size}_game_count')
             if hist_games:
-                label += f"\n\nHistorical ({hist_games} games):"
+                label += f"\n\nHistorical (Reg:{hist_games[0]}/OT:{hist_games[1]}/SO:{hist_games[2]}):"
+
+                # Include key stats (now just averages without the _avg suffix)
                 for stat in ['goal', 'goal_against', 'shot_attempt', 'shot_on_goal', 'faceoff_won']:
                     hist_stat = node_data.get(f'hist_{window_size}_{stat}')
                     if hist_stat:
-                        label += f"\n{stat}: {hist_stat}"
+                        label += f"\n{stat}: {[round(x, 2) for x in hist_stat]}"
 
         labels[node] = label
 
@@ -179,7 +191,7 @@ def visualize_game_graph(data_graph, game_id, window_size=10, output_path=None, 
     game_date = data_graph.nodes[game_id].get('game_date', '')
     plt.title(f"Game {game_id} Network Graph - {game_date}\n"
               f"Showing {selected_team} players only\n"
-              f"({edge_sample_rate * 100}% of player interactions and {window_size}-game historical stats)",
+              f"({edge_sample_rate * 100}% of player interactions and {window_size}-game historical averages)",
               pad=20, size=24)
 
     # Add legend
@@ -197,6 +209,25 @@ def visualize_game_graph(data_graph, game_id, window_size=10, output_path=None, 
         plt.Line2D([0], [0], color='purple', linestyle='solid',
                    label='Player Interaction', linewidth=2, alpha=0.3)
     )
+
+    # Add a legend section for period types
+    legend_elements.append(
+        plt.Line2D([0], [0], color='white', marker='', linestyle='',
+                   label='\nPeriod Types:', markersize=0)
+    )
+    legend_elements.append(
+        plt.Line2D([0], [0], color='white', marker='', linestyle='',
+                   label='Reg: Regulation', markersize=0)
+    )
+    legend_elements.append(
+        plt.Line2D([0], [0], color='white', marker='', linestyle='',
+                   label='OT: Overtime', markersize=0)
+    )
+    legend_elements.append(
+        plt.Line2D([0], [0], color='white', marker='', linestyle='',
+                   label='SO: Shootout', markersize=0)
+    )
+
     plt.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1, 1), fontsize=16)
 
     plt.tight_layout()
