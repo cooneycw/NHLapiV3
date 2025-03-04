@@ -10,7 +10,7 @@ def main():
     config_dict = {
         "verbose": False,
         "produce_csv": False,
-        "season_count": 1,
+        "season_count": 3,
         "delete_pickles": True,
         "reload_seasons": True,
         "reload_teams": True,
@@ -22,9 +22,9 @@ def main():
     }
     config = Config(config_dict)
     config_model = ConfigModel()
-    # get_data(config)
-    # curate_data(config)
-    # model_data(config)
+    get_data(config)
+    curate_data(config)
+    model_data(config)
     model_visualization(config)
     # model, metrics = gnn(config, config_model)
 

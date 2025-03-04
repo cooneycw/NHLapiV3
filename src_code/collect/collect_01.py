@@ -341,7 +341,7 @@ def internal_process_game(game, config):
     response_plays.raise_for_status()  # Ensure the response is OK
     data_plays = response_plays.json()
     results_plays = process_plays(data_plays)
-    results_game_rosters = process_game_rosters(data_plays)
+    results_game_rosters = process_game_rosters(data_plays, game_date=game[1])
 
     return results_shifts, results_plays, results_game_rosters
 
@@ -442,7 +442,7 @@ def process_shifts(config, game, soup):
     return shifts
 
 
-def process_game_rosters(data):
+def process_game_rosters(data, game_date):
     away_team = data['awayTeam']['abbrev']
     home_team = data['homeTeam']['abbrev']
     rosters = list()
@@ -458,6 +458,7 @@ def process_game_rosters(data):
             home_cnt += 1
         roster = dict()
         roster['game_id'] = data['id']
+        roster['game_date'] = game_date
         roster['player_team'] = teams[player['teamId']]
         roster['player_id'] = player['playerId']
         roster['player_first_name'] = player['firstName']
@@ -474,6 +475,7 @@ def process_game_rosters(data):
             dummy_player = create_dummy_player(
                 game_id=data['id'],
                 team_abbrev=away_team,
+                game_date=game_date,
                 player_id= default_id,
             )
             default_id += 1
@@ -487,6 +489,7 @@ def process_game_rosters(data):
             dummy_player = create_dummy_player(
                 game_id=data['id'],
                 team_abbrev=home_team ,
+                game_date=game_date,
                 player_id=default_id,
             )
             default_id += 1

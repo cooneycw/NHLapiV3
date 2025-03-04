@@ -246,10 +246,11 @@ def create_player_stats(player_id):
     return player_stats
 
 
-def create_dummy_player(game_id, team_abbrev, player_id):
+def create_dummy_player(game_id, team_abbrev, game_date, player_id):
     return {
         'game_id': game_id,
         'player_team': team_abbrev,
+        'game_date': game_date,
         'player_id': player_id,  # or a placeholder like 'DUMMY'
         'player_last_name': {'default': 'XX'},
         'player_first_name': {'default': 'XX'},

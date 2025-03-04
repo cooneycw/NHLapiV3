@@ -108,19 +108,24 @@ def visualize_game_graph(data_graph, game_id, window_size=10, output_path=None, 
                 toi = edge_data.get('toi', [0, 0, 0])
 
                 # Get games played count for context
-                games_played = edge_data.get(f'hist_{window_size}_games_played', [0, 0, 0])
+                games = edge_data.get(f'hist_{window_size}_games', [0, 0, 0])
 
                 # Get historical stats (assuming these are now stored as averages)
-                hist_goal = edge_data.get(f'hist_{window_size}_goal', [0, 0, 0])
-                hist_toi = edge_data.get(f'hist_{window_size}_toi', [0, 0, 0])
+                hist_goal = edge_data.get(f'hist_{window_size}_goal_avg', [0, 0, 0])
+                hist_asst = edge_data.get(f'hist_{window_size}_assist_avg', [0, 0, 0])
+                hist_shot = edge_data.get(f'hist_{window_size}_shot_on_goal_avg', [0, 0, 0])
+                hist_toi = edge_data.get(f'hist_{window_size}_toi_avg', [0, 0, 0])
 
                 # Current game info
-                label = f'Current - G:{goals}\nTOI:{toi}'
+                label = f'Current - Goals:{goals}\nTOI:{toi}\n'
 
                 # Historical stats (implicitly averages)
-                if sum(games_played) > 0:
-                    label += f'\nHist(Reg:{games_played[0]}/OT:{games_played[1]}/SO:{games_played[2]})\n'
-                    label += f'G:{[round(x, 2) for x in hist_goal]}\nTOI:{[round(x, 2) for x in hist_toi]}'
+                if sum(games) > 0:
+                    label += f'\nHist(Reg:{games[0]}/OT:{games[1]}/SO:{games[2]}\n'
+                    label += f'Goals:{[round(x, 2) for x in hist_goal]}\n'
+                    label += f'Assists:{[round(x, 2) for x in hist_asst]}\n'
+                    label += f'TOI:{[round(x, 2) for x in hist_toi]}\n'
+                    label += f'Shots on Goal:{[round(x, 2) for x in hist_shot]}\n'
 
                 edge_labels[(u, v)] = label
 
@@ -137,7 +142,7 @@ def visualize_game_graph(data_graph, game_id, window_size=10, output_path=None, 
         if node_data.get('type') == 'player_game_performance':
             # Current game stats
             current_stats = ['player_position',
-                             'toi', 'goal', 'assist', 'point', 'faceoff_taken', 'faceoff_won',
+                             'toi', 'goal', 'assist', 'faceoff_taken', 'faceoff_won',
                              'shot_on_goal', 'shot_blocked', 'shot_saved',
                              'goal_saved', 'goal_against']
 
@@ -147,23 +152,23 @@ def visualize_game_graph(data_graph, game_id, window_size=10, output_path=None, 
                     label += f"\n{stat}: {node_data[stat]}"
 
             # Historical stats
-            hist_games = node_data.get(f'hist_{window_size}_game_count')
+            hist_games = node_data.get(f'hist_{window_size}_games')
             if hist_games:
                 label += f"\n\nHistorical (Reg:{hist_games[0]}/OT:{hist_games[1]}/SO:{hist_games[2]}):"
 
                 # Include key stats (now just averages without the _avg suffix)
-                for stat in ['toi', 'goal', 'goal_against', 'assist', 'point', 'faceoff_won', 'shot_on_goal']:
-                    hist_stat = node_data.get(f'hist_{window_size}_{stat}')
+                for stat in ['toi', 'goal', 'goal_against', 'assist', 'faceoff_won', 'shot_on_goal']:
+                    hist_stat = node_data.get(f'hist_{window_size}_{stat}_avg')
                     if hist_stat:
-                        label += f"\n{stat}: {[round(x, 2) for x in hist_stat]}"
+                        label += f"\n{stat}_avg: {[round(x, 2) for x in hist_stat]}"
 
         elif node_data.get('type') == 'team_game_performance':
             current_stats = [
-                'home', 'days_since_last_game', 'valid',
+                'home', 'win', 'loss', 'days_since_last_game', 'valid',
                 'goal', 'goal_against', 'shot_attempt', 'shot_on_goal',
                 'shot_blocked', 'shot_saved', 'faceoff_taken',
                 'faceoff_won', 'hit_another_player', 'hit_by_player',
-                'penalties_duration', 'win', 'loss'
+                'penalties_duration'
             ]
 
             label += "\nCurrent Game:"
@@ -172,13 +177,13 @@ def visualize_game_graph(data_graph, game_id, window_size=10, output_path=None, 
                     label += f"\n{stat}: {node_data[stat]}"
 
             # Historical team stats
-            hist_games = node_data.get(f'hist_{window_size}_game_count')
+            hist_games = node_data.get(f'hist_{window_size}_games')
             if hist_games:
                 label += f"\n\nHistorical (Reg:{hist_games[0]}/OT:{hist_games[1]}/SO:{hist_games[2]}):"
 
                 # Include key stats (now just averages without the _avg suffix)
-                for stat in ['goal', 'goal_against', 'shot_attempt', 'shot_on_goal', 'faceoff_won']:
-                    hist_stat = node_data.get(f'hist_{window_size}_{stat}')
+                for stat in ['win', 'loss', 'goal', 'goal_against', 'shot_attempt', 'shot_on_goal', 'faceoff_won']:
+                    hist_stat = node_data.get(f'hist_{window_size}_{stat}_avg')
                     if hist_stat:
                         label += f"\n{stat}: {[round(x, 2) for x in hist_stat]}"
 

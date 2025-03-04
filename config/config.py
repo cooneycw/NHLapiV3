@@ -13,9 +13,9 @@ class Config:
         self.verbose = input_dict['verbose']
         self.produce_csv = input_dict['produce_csv']
         self.stat_window_sizes = [5, 7, 10, 20]
-        # self.curr_date = datetime.now().date()
-        self.split_data = datetime(2024, 12, 1).date()
-        self.curr_date = datetime(2024, 12, 1).date()
+        self.curr_date = datetime.now().date()
+        self.split_data = datetime(2024, 1, 1).date()
+        # self.curr_date = datetime(2024, 12, 1).date()
         self.max_workers = 28
         self.base_url = "https://api-web.nhle.com"
         self.base_url_lines = "https://www.dailyfaceoff.com"
@@ -93,7 +93,7 @@ class Config:
             ],
             'player_pair_stats': [
                 'toi', 'faceoff_taken', 'faceoff_won', 'shot_on_goal', 'shot_saved',
-                'goal', 'hit_another_player', 'hit_by_player', 'penalties_duration'
+                'goal', 'assist', 'hit_another_player', 'hit_by_player', 'penalties_duration'
             ]
         }
 
@@ -293,4 +293,5 @@ class Config:
             'sport_stat': True,
         }
         return event_categ
+
 

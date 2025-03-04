@@ -3,8 +3,8 @@ from src_code.utils.graph_utils import (
     create_graph, add_team_node, add_player_node, add_game, process_games_chronologically,
     add_player_game_performance, update_tgp_stats, update_pgp_stats, update_pgp_edge_stats,
     update_game_outcome, get_historical_tgp_stats, get_historical_pgp_stats,
-    get_historical_pgp_edge_stats, calculate_historical_stats)
-from src_code.utils.summary_utils import update_game_nodes
+    calculate_historical_stats,
+    build_game_to_pgp_index, build_game_to_pgp_edges_index)
 from src_code.utils.display_graph_utils import visualize_game_graph
 from src_code.utils.save_graph_utils import save_graph, load_graph
 import copy
@@ -62,7 +62,6 @@ def model_data(config):
         #     for goal in goal_instances:
         #         print(
         #             f"Goal found - shift index: {q} Player Index: {goal['player_index']}, Player ID: {goal['player_id']}, Team: {goal['player_team']}, Periods: {goal['goal_periods']}")
-
         process_shift_data(data_graph, verbose, team_game_maps[m], shift_data)
         shifts.append(shift_data)
         update_game_outcome(data_graph, game['id'], game)
@@ -80,8 +79,13 @@ def model_data(config):
         #     visualize_game_graph(data_graph, game['id'],
         #                          output_path=f"{config.file_paths['game_output_jpg']}/game_{game['id']}_network_{game['game_date']}.jpg")
 
-    # After ALL games are processed, calculate historical stats
-    print(f"processing historic game stats...")
+    # After all game and player data is processed
+    print("Building performance mapping indexes...")
+    build_game_to_pgp_index(data_graph)
+    build_game_to_pgp_edges_index(data_graph)
+
+    # Then calculate historical stats
+    print("Processing historic game stats...")
     data_graph = calculate_historical_stats(config, data_graph)
     save_graph(data_graph, config.file_paths["graph"])
 
