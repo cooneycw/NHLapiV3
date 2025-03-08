@@ -16,7 +16,7 @@ class Config:
         self.curr_date = datetime.now().date()
         self.split_data = datetime(2024, 1, 1).date()
         # self.curr_date = datetime(2024, 12, 1).date()
-        self.max_workers = 12
+        self.max_workers = 28
         self.base_url = "https://api-web.nhle.com"
         self.base_url_lines = "https://www.dailyfaceoff.com"
         self.headers_lines = {
