@@ -16,7 +16,7 @@ class Config:
         self.curr_date = datetime.now().date()
         self.split_data = datetime(2024, 1, 1).date()
         # self.curr_date = datetime(2024, 12, 1).date()
-        self.max_workers = 28
+        self.max_workers = 12
         self.base_url = "https://api-web.nhle.com"
         self.base_url_lines = "https://www.dailyfaceoff.com"
         self.headers_lines = {
@@ -59,6 +59,7 @@ class Config:
         self.reload_seasons = input_dict.get("reload_seasons", True)
         self.reload_teams = input_dict.get("reload_teams", True)
         self.reload_games = input_dict.get("reload_games", True)
+        self.update_game_statuses = input_dict.get("update_game_statuses", True)
         self.reload_boxscores = input_dict.get("reload_boxscores", True)
         self.reload_players = input_dict.get("reload_boxscores", True)
         self.reload_playernames = input_dict.get("reload_playernames", True)

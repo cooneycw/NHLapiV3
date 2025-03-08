@@ -2,51 +2,101 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from src_code.utils.utils import create_dummy_player
-import functools
+import os
 import re
 import requests
+import time
 
 
 def get_season_data(config):
     print(f'Gathering season data...')
-    if config.delete_files:
-        config.del_data()
     dimension = "all_seasons"
+
+    # Only delete files if explicitly requested
+    # This selective approach avoids deleting everything unnecessarily
+    if config.delete_files:
+        file_path = config.file_paths[dimension]
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(f"Deleted {file_path}")
+
+    # Try to load existing data
     prior_data = config.load_data(dimension)
-    if prior_data and config.reload_seasons is False:
+
+    # Check if we have valid data and don't need to reload
+    if prior_data and not config.reload_seasons:
+        print(f'Using cached season data ({len(prior_data)} seasons)...')
+        # Use the cached data
         for season in prior_data:
             _ = config.Season(season)
-    if (prior_data is None) or (config.reload_seasons is True):
+    else:
+        # We need to fetch new data
+        reason = "Reload requested." if config.reload_seasons else "No valid cached data."
+        print(f'{reason} Fetching season data from API...')
+
         final_url = config.get_endpoint("seasons")
         response = requests.get(final_url)
         season_data = response.json()
+
+        # Register the seasons with the config object
         for season in season_data:
             _ = config.Season(season)
+
+        # Save the data for future use
         config.save_data(dimension, season_data)
+
+        print(f'Fetched and saved {len(season_data)} seasons.')
 
 
 def get_team_list(config):
     print(f'Gathering team data...')
     dimension = "all_teams"
+
+    # Handle selective file deletion if requested
+    if config.delete_files:
+        file_path = config.file_paths[dimension]
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(f"Deleted {file_path}")
+
+    # Try to load existing data
     prior_data = config.load_data(dimension)
-    if prior_data and config.reload_teams is False:
+
+    # Check if we have valid data and don't need to reload
+    if prior_data and not config.reload_teams:
+        print(f'Using cached team data ({len(prior_data)} teams)...')
+        # Use the cached data
         for team in prior_data:
             _ = config.Team(team)
-    if (prior_data is None) or (config.reload_teams is True):
+    else:
+        # We need to fetch new data
+        reason = "Reload requested." if config.reload_teams else "No valid cached data."
+        print(f'{reason} Fetching team data from API...')
+
         final_url = config.get_endpoint("standings")
         response = requests.get(final_url)
         standings_data = response.json()
+
+        # Extract and sort team abbreviations
         team_list = []
         for item in standings_data['standings']:
             team_abbrev = item['teamAbbrev']['default']
             team_list.append(team_abbrev)
         team_list = sorted(team_list)
+
+        # Register the teams with the config object
         for team in team_list:
             config.Team(team)
+
+        # Save the data for future use
         config.save_data(dimension, team_list)
+
+        print(f'Fetched and saved {len(team_list)} teams.')
 
 
 def fetch_games_for_team_and_season(config, season, team):
+    print(f'Fetching games for {team[0]} in season {season[0]}...')
+
     final_url = config.get_endpoint("schedule", team=team[0], season=season[0])
     response = requests.get(final_url)
     response.raise_for_status()
@@ -59,25 +109,42 @@ def fetch_games_for_team_and_season(config, season, team):
         if game["gameType"] != 2:
             continue
 
-        # Skip postponed game
-        if game['gameDate'] == '2025-01-08':  # postponed due to wildfires
-            if game['awayTeam']['abbrev'] == 'CGY':
-                continue
-
         game_date = datetime.strptime(game["gameDate"], "%Y-%m-%d")
-
-        # Skip future games
-        if game_date.date() >= config.curr_date:
-            continue
-
         home_team = game["homeTeam"]['abbrev']
         away_team = game["awayTeam"]['abbrev']
-        game_obj = config.Game.create_game(game['id'], game_date, home_team, away_team, season[0])
 
-        if game_obj is None:
+        # Skip future games for game object creation
+        if game_date.date() >= config.curr_date:
+            # Track future games with a status field
+            future_game = (
+                game['id'],
+                game_date,
+                away_team,
+                home_team,
+                season[0],
+                'scheduled'
+            )
+            partial_data.append(future_game)
             continue
 
-        partial_data.append(game_obj.get_game_tuple())
+        # For past games, create the game object and add its tuple
+        game_obj = config.Game.create_game(
+            game['id'],
+            game_date,
+            home_team,
+            away_team,
+            season[0]
+        )
+
+        # If the game object is None, it means this game was already created
+        # This is NORMAL BEHAVIOR, not an error - don't report as a warning
+        if game_obj is None:
+            # Game already exists in dictionary, just add the tuple to our list
+            game_tuple = (game['id'], game_date, away_team, home_team, season[0])
+            partial_data.append(game_tuple)
+        else:
+            # New game was created, add its tuple to our list
+            partial_data.append(game_obj.get_game_tuple())
 
     return partial_data
 
@@ -85,43 +152,252 @@ def fetch_games_for_team_and_season(config, season, team):
 def get_game_list(config):
     print('Gathering game data by team...')
     dimension = "all_games"
+
+    # Handle selective file deletion if requested
+    if config.delete_files:
+        file_path = config.file_paths[dimension]
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            print(f"Deleted {file_path}")
+
+    # Try to load existing data with detailed logging
+    print(f"Attempting to load game data from {config.file_paths[dimension]}")
     prior_data = config.load_data(dimension)
+    print(f"Load result: {'Data found with ' + str(len(prior_data)) + ' entries' if prior_data else 'No data found'}")
 
-    if prior_data and config.reload_games is False:
-        # Only create games for past dates
-        filtered_games = [game for game in prior_data if game[1].date() < config.curr_date]
-        for game in filtered_games:
-            _ = config.Game.create_game(game[0], game[1], game[2], game[3], game[4])
-        return
+    # Check for the status update flag, defaulting to True if not set
+    update_game_statuses = getattr(config, 'update_game_statuses', True)
+    print(f"Config settings: reload_games={config.reload_games}, update_game_statuses={update_game_statuses}")
 
-    # Otherwise, fetch in parallel
-    season_team_pairs = []
-    for season in config.Season.get_selected_seasons(config.season_count):
-        for team in config.Team.get_teams():
-            season_team_pairs.append((season, team))
+    # Check if we have valid data and don't need to reload
+    if prior_data and not config.reload_games:
+        print(f'Using cached game data ({len(prior_data)} games)...')
 
+        # Split games into completed, scheduled and postponed
+        completed_games = []
+        future_games = []
+        postponed_games = []
+        failed_games = []
+        games_needing_update = []
+
+        # Process each game based on its status and date
+        for game in prior_data:
+            # Check if this is a game with status fields (new format)
+            if len(game) > 5:
+                status = game[5]
+                if status == 'postponed':
+                    # If date has passed and updates enabled, this game needs checking
+                    if game[1].date() < config.curr_date and update_game_statuses:
+                        games_needing_update.append(game)
+                    else:
+                        postponed_games.append(game)
+                elif status == 'scheduled':
+                    # If scheduled date has passed and updates enabled, check if it happened
+                    if game[1].date() < config.curr_date and update_game_statuses:
+                        games_needing_update.append(game)
+                    else:
+                        future_games.append(game)
+                elif status in ['error', 'creation_failed']:
+                    failed_games.append(game)
+            # Standard format game tuple - assume it's a completed game
+            elif game[1].date() < config.curr_date:
+                completed_games.append(game)
+
+        # Create game objects only for completed games
+        print(f'Loading {len(completed_games)} completed games...')
+        success_count = 0
+        already_exists_count = 0
+        error_count = 0
+
+        for game in completed_games:
+            try:
+                game_obj = config.Game.create_game(game[0], game[1], game[2], game[3], game[4])
+                if game_obj:
+                    success_count += 1
+                else:
+                    # This is not a failure - the game already exists in the dictionary
+                    already_exists_count += 1
+            except Exception as e:
+                error_count += 1
+                print(f"Error creating game object for {game[0]} - {game[2]} @ {game[3]}: {str(e)}")
+
+        print(
+            f"Successfully loaded {success_count} new games, {already_exists_count} were already in the dictionary, {error_count} errors")
+
+        # Log about other game types
+        if postponed_games:
+            print(f'Found {len(postponed_games)} postponed games')
+        if future_games:
+            print(f'Found {len(future_games)} future scheduled games')
+        if failed_games:
+            print(f'Found {len(failed_games)} games that previously failed to create')
+
+        # If we have games that need updates and updates are enabled
+        if games_needing_update and update_game_statuses:
+            print(
+                f'Found {len(games_needing_update)} games that need updating (previously future/postponed, now past date)')
+
+            # Identify which teams and seasons need updates
+            teams_needing_update = set()
+            seasons_needing_update = set()
+            for game in games_needing_update:
+                teams_needing_update.add(game[2])  # Away team
+                teams_needing_update.add(game[3])  # Home team
+                seasons_needing_update.add(game[4])  # Season
+
+            print(
+                f'Will update data for {len(teams_needing_update)} teams across {len(seasons_needing_update)} seasons')
+
+            # Create a list of season-team pairs to update
+            season_team_pairs = []
+            for season in seasons_needing_update:
+                for team in teams_needing_update:
+                    season_obj = next(
+                        (s for s in config.Season.get_selected_seasons(config.season_count) if s[0] == season), None)
+                    team_obj = next((t for t in config.Team.get_teams() if t[0] == team), None)
+                    if season_obj and team_obj:
+                        season_team_pairs.append((season_obj, team_obj))
+
+            print(f'Will fetch updates for {len(season_team_pairs)} season-team combinations')
+        else:
+            # No updates needed or updates disabled
+            if games_needing_update and not update_game_statuses:
+                print(f'Found {len(games_needing_update)} games that would need updating, but updates are disabled')
+
+            # Nothing to update, return early
+            print('No updates needed for game data')
+            return
+    else:
+        # We need to fetch all game data
+        reason = "Reload requested." if config.reload_games else "No valid cached data."
+        print(f'{reason} Will fetch all game data from API...')
+
+        # Get all season-team pairs for fetching
+        season_team_pairs = []
+        for season in config.Season.get_selected_seasons(config.season_count):
+            for team in config.Team.get_teams():
+                season_team_pairs.append((season, team))
+
+        print(f'Will fetch data for {len(season_team_pairs)} season-team combinations')
+
+    # At this point, season_team_pairs contains what we need to fetch
+    print(f'Starting parallel fetch for {len(season_team_pairs)} season-team pairs...')
+
+    # Set up our results array
     results_in_order = [None] * len(season_team_pairs)
 
+    # Use ThreadPoolExecutor for parallel requests
     with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
+        # Submit all jobs and track their start times
         future_to_index = {
             executor.submit(fetch_games_for_team_and_season, config, season, team): i
             for i, (season, team) in enumerate(season_team_pairs)
         }
 
+        # Collect results as they complete
+        complete_count = 0
         for future in as_completed(future_to_index):
             i = future_to_index[future]
             try:
                 data = future.result()
                 results_in_order[i] = data
+
+                complete_count += 1
+                if complete_count % 10 == 0 or complete_count == len(season_team_pairs):
+                    print(f'Processed {complete_count}/{len(season_team_pairs)} team-seasons...')
             except Exception as exc:
-                print(f"Request {i} raised an exception: {exc}")
+                season, team = season_team_pairs[i]
+                print(f"Error fetching games for {team[0]} in season {season[0]}: {exc}")
+                import traceback
+                traceback.print_exc()
 
-    save_data = []
-    for data_list in results_in_order:
-        if data_list:
-            save_data.extend(data_list)
+    # Collect all results
+    new_games = []
+    unique_game_ids = set()  # Track unique game IDs to handle duplicates
+    duplicates = 0
 
-    config.save_data(dimension, save_data)
+    for games_list in results_in_order:
+        if games_list:
+            for game in games_list:
+                game_id = game[0]
+                if game_id not in unique_game_ids:
+                    unique_game_ids.add(game_id)
+                    new_games.append(game)
+                else:
+                    duplicates += 1
+
+    print(f'Fetched {len(new_games)} unique games from API')
+    if duplicates > 0:
+        print(f'Filtered out {duplicates} duplicate games (expected due to team schedules overlap)')
+
+    if prior_data and not config.reload_games and update_game_statuses:
+        # This was a partial update - merge with existing data
+        # Create a dictionary of game IDs to new game data
+        new_games_dict = {game[0]: game for game in new_games}
+
+        # Start with all existing games
+        updated_games = []
+        updated_count = 0
+
+        for game in prior_data:
+            game_id = game[0]
+            # If we have updated data for this game, use it
+            if game_id in new_games_dict:
+                updated_games.append(new_games_dict[game_id])
+                updated_count += 1
+                # Remove from dict to track what we've processed
+                del new_games_dict[game_id]
+            else:
+                # Keep existing data for games we didn't update
+                updated_games.append(game)
+
+        # Add any completely new games we found
+        new_count = len(new_games_dict)
+        for game in new_games_dict.values():
+            updated_games.append(game)
+
+        print(
+            f'Updated game list: {updated_count} games updated, {new_count} new games added, {len(updated_games)} total games')
+        all_games = updated_games
+    else:
+        # This was a full reload - just use the new data
+        all_games = new_games
+        print(f'New game data has {len(all_games)} total games')
+
+    # Create game objects for completed games (exclude scheduled future games)
+    completed_games = []
+    for game in all_games:
+        if len(game) <= 5:  # Standard format - assumed completed
+            completed_games.append(game)
+        elif game[5] not in ['scheduled', 'error', 'creation_failed']:  # Include completed games with status
+            completed_games.append(game)
+
+    print(f'Creating game objects for {len(completed_games)} completed games...')
+    success_count = 0
+    already_exists_count = 0
+    error_count = 0
+
+    for game in completed_games:
+        try:
+            if len(game) <= 5:  # Standard format
+                game_obj = config.Game.create_game(game[0], game[1], game[2], game[3], game[4])
+                if game_obj:
+                    success_count += 1
+                else:
+                    # This is not a failure - it just means the game was already created
+                    already_exists_count += 1
+        except Exception as e:
+            error_count += 1
+            print(f"Error creating game object for {game[0]} - {game[2]} @ {game[3]}: {str(e)}")
+
+    print(
+        f"Successfully created {success_count} new game objects, {already_exists_count} were already in the dictionary, {error_count} errors")
+
+    # Save all game data for future use
+    print(f'Saving {len(all_games)} total games to cache...')
+    config.save_data(dimension, all_games)
+
+    print('Game data gathering complete')
 
 
 def process_game(game, config):
@@ -363,19 +639,75 @@ def get_playbyplay_data(config):
     if (prior_data_shifts is None) or (config.reload_playbyplay is True):
         # Filter out future games before processing
         games = [game for game in config.Game.get_games()
-                if game[1].date() < config.curr_date]
+                 if game[1].date() < config.curr_date]
 
+        # Create a process pool
         with ProcessPoolExecutor(max_workers=config.max_workers) as executor:
-            func = functools.partial(internal_process_game, config=config)
-            results = list(executor.map(func, games))
+            # Start the monitoring in a separate thread
+            futures_dict = {}
 
-        save_results_shifts = [result[0] for result in results]
-        save_results_plays = [result[1] for result in results]
-        save_results_game_rosters = [result[2] for result in results]
+            # Submit all jobs and track their start times
+            for game in games:
+                future = executor.submit(internal_process_game, game, config)
+                futures_dict[future] = {
+                    'start_time': time.time(),
+                    'game': game
+                }
 
+            # Collect results as they complete
+            save_results_shifts = []
+            save_results_plays = []
+            save_results_game_rosters = []
+
+            try:
+                for future in as_completed(futures_dict.keys()):
+                    try:
+                        result = future.result()
+                        save_results_shifts.append(result[0])
+                        save_results_plays.append(result[1])
+                        save_results_game_rosters.append(result[2])
+                    except Exception as exc:
+                        game = futures_dict[future]['game']
+                        print(f"Error processing game {game[0]} ({game[2]} vs {game[3]}): {exc}")
+            finally:
+                pass
+
+        # Save all the collected data
         config.save_data(dimension_shifts, save_results_shifts)
         config.save_data(dimension_plays, save_results_plays)
         config.save_data(dimension_game_rosters, save_results_game_rosters)
+
+
+# def get_playbyplay_data(config):
+#     print('Gathering play by play data...')
+#     dimension_shifts = "all_shifts"
+#     dimension_plays = "all_plays"
+#     dimension_game_rosters = "all_game_rosters"
+#
+#     prior_data_shifts = config.load_data(dimension_shifts)
+#     prior_data_plays = config.load_data(dimension_plays)
+#     prior_data_game_rosters = config.load_data(dimension_game_rosters)
+#
+#     if prior_data_shifts and config.reload_playbyplay is False:
+#         for results in prior_data_plays:
+#             pass  # Your existing code logic
+#
+#     if (prior_data_shifts is None) or (config.reload_playbyplay is True):
+#         # Filter out future games before processing
+#         games = [game for game in config.Game.get_games()
+#                 if game[1].date() < config.curr_date]
+#
+#         with ProcessPoolExecutor(max_workers=config.max_workers) as executor:
+#             func = functools.partial(internal_process_game, config=config)
+#             results = list(executor.map(func, games))
+#
+#         save_results_shifts = [result[0] for result in results]
+#         save_results_plays = [result[1] for result in results]
+#         save_results_game_rosters = [result[2] for result in results]
+#
+#         config.save_data(dimension_shifts, save_results_shifts)
+#         config.save_data(dimension_plays, save_results_plays)
+#         config.save_data(dimension_game_rosters, save_results_game_rosters)
 
 
 def process_shifts(config, game, soup):

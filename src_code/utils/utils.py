@@ -1,5 +1,5 @@
 import pickle
-
+import time
 
 def save_game_data(obj, filename):
     pickle.dump(obj, open(filename, "wb"), pickle.HIGHEST_PROTOCOL)
@@ -258,3 +258,35 @@ def create_dummy_player(game_id, team_abbrev, game_date, player_id):
         'player_position': ' '
     }
 
+
+def monitor_pending_workers(futures_dict, interval=20, threshold=300):
+    """
+    Monitor pending workers and display ones that have been running for more than the threshold.
+
+    Args:
+        futures_dict: Dictionary mapping futures to their metadata {future: {'start_time': timestamp, 'game': game_data}}
+        interval: How often to check and display (seconds)
+        threshold: Time threshold to consider a worker as "pending too long" (seconds)
+    """
+    while any(not future.done() for future in futures_dict.keys()):
+        current_time = time.time()
+        pending_workers = []
+
+        for future, metadata in list(futures_dict.items()):
+            if not future.done():
+                elapsed_time = current_time - metadata['start_time']
+                if elapsed_time > threshold:
+                    game = metadata['game']
+                    pending_workers.append({
+                        'elapsed': int(elapsed_time),
+                        'game_id': game[0],
+                        'date': game[1].strftime('%Y-%m-%d'),
+                        'teams': f"{game[2]} vs {game[3]}"
+                    })
+
+        if pending_workers:
+            print(f"\n===== {len(pending_workers)} workers pending for more than {threshold} seconds =====")
+            for worker in sorted(pending_workers, key=lambda x: x['elapsed'], reverse=True):
+                print(f"  {worker['elapsed']}s: Game {worker['game_id']} ({worker['date']}) - {worker['teams']}")
+
+        time.sleep(interval)
