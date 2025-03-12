@@ -10,6 +10,16 @@ from datetime import datetime
 
 class Config:
     def __init__(self, input_dict):
+        # Log unknown parameters to help debug config issues
+        known_params = {"verbose", "produce_csv", "days_list", "seg_games", "season_count",
+                        "delete_files", "reload_seasons", "reload_teams", "reload_games",
+                        "update_game_statuses", "reload_boxscores", "reload_players",
+                        "reload_playernames", "reload_playbyplay", "reload_rosters"}
+
+        unknown_params = set(input_dict.keys()) - known_params
+        if unknown_params:
+            print(f"Warning: Unknown configuration parameters: {unknown_params}")
+
         self.verbose = input_dict['verbose']
         self.produce_csv = input_dict['produce_csv']
         self.stat_window_sizes = [5, 7, 10, 20]
@@ -54,17 +64,17 @@ class Config:
 
         self.days_list = input_dict.get("days_list", None)
         self.seg_games = input_dict.get("seg_games", None)
-        self.season_count = input_dict.get("season_count", None)
-        self.delete_files = input_dict.get("delete_files", None)
-        self.reload_seasons = input_dict.get("reload_seasons", True)
-        self.reload_teams = input_dict.get("reload_teams", True)
-        self.reload_games = input_dict.get("reload_games", True)
+        self.season_count = input_dict.get("season_count", 3)
+        self.delete_files = input_dict.get("delete_files", False)
+        self.reload_seasons = input_dict.get("reload_seasons", False)
+        self.reload_teams = input_dict.get("reload_teams", False)
+        self.reload_games = input_dict.get("reload_games", False)
         self.update_game_statuses = input_dict.get("update_game_statuses", True)
-        self.reload_boxscores = input_dict.get("reload_boxscores", True)
-        self.reload_players = input_dict.get("reload_boxscores", True)
-        self.reload_playernames = input_dict.get("reload_playernames", True)
-        self.reload_playbyplay = input_dict.get("reload_playbyplay", True)
-        self.reload_rosters = input_dict.get("reload_rosters", True)
+        self.reload_boxscores = input_dict.get("reload_boxscores", False)
+        self.reload_players = input_dict.get("reload_players", False)
+        self.reload_playernames = input_dict.get("reload_playernames", False)
+        self.reload_playbyplay = input_dict.get("reload_playbyplay", False)
+        self.reload_rosters = input_dict.get("reload_rosters", False)
         self.Season = Season
         self.Team = Team
         self.Game = Game
@@ -124,8 +134,39 @@ class Config:
 
     def save_data(self, dimension, data):
         try:
+            # Sort the data by game_id before saving
+            if dimension in ["all_boxscores", "all_plays", "all_shifts", "all_game_rosters"]:
+                # Sort based on the data structure
+                if dimension == "all_boxscores":
+                    sorted_data = sorted(data, key=lambda x: x['id'])
+                elif dimension == "all_plays":
+                    sorted_data = sorted(data, key=lambda x: x[0]['game_id'] if (
+                                x and len(x) > 0 and 'game_id' in x[0]) else 0)
+                elif dimension == "all_shifts":
+                    # For shifts, find the game_id in the first item that has it
+                    def get_shift_game_id(shift_list):
+                        if not shift_list or len(shift_list) == 0:
+                            return 0
+                        for shift in shift_list:
+                            if 'game_id' in shift:
+                                return shift['game_id']
+                        return 0
+
+                    sorted_data = sorted(data, key=get_shift_game_id)
+                elif dimension == "all_game_rosters":
+                    # For rosters, use the game_id from the first item if available
+                    sorted_data = sorted(data, key=lambda x: x[0]['game_id'] if (
+                                x and len(x) > 0 and 'game_id' in x[0]) else 0)
+                else:
+                    sorted_data = data
+            else:
+                # For other data types that don't need sorting
+                sorted_data = data
+
             with open(self.file_paths[dimension], 'wb') as file:
-                pickle.dump(data, file)
+                pickle.dump(sorted_data, file)
+
+            print(f"Saved sorted data to {self.file_paths[dimension]}")
         except Exception as e:
             print(f"Error saving data to {self.file_paths[dimension]}: {str(e)}")
 

@@ -2,7 +2,6 @@ import multiprocessing as mp
 from multiprocessing import Queue
 from src_code.utils.utils import (
     period_time_to_game_time,
-    create_player_dict,
     create_roster_dicts,
     create_ordered_roster,
     create_player_stats,
@@ -45,7 +44,7 @@ def curate_data(config):
         reporter_process.start()
 
         # Create pool of workers
-        with mp.Pool(processes=config.max_workers) as pool:
+        with mp.Pool(processes=int(0.35* config.max_workers)) as pool:
             # Process games in parallel
             pool.starmap(
                 process_single_game,

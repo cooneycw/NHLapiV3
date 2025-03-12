@@ -11,21 +11,22 @@ def main():
     config_dict = {
         "verbose": False,
         "produce_csv": False,
-        "season_count": 3,
-        "delete_pickles": True,
+        "season_count": 1,
+        "delete_files": False,
         "reload_seasons": False,
         "reload_teams": False,
         "reload_games": False,
         "update_game_statuses": True,
         "reload_boxscores": False,
-        "reload_playernames": True,
-        "reload_playbyplay": True,
-        "reload_rosters": True,
+        "reload_players": False,
+        "reload_playernames": False,
+        "reload_playbyplay": False,
+        "reload_rosters": False
     }
     config = Config(config_dict)
     config_model = ConfigModel()
     get_data(config)
-    # curate_data(config)
+    curate_data(config)
     # model_data(config)
     # model_visualization(config)
     # model, metrics = gnn(config, config_model)
@@ -38,10 +39,6 @@ def get_data(config):
     get_boxscore_list(config)
     get_player_names(config)
     get_playbyplay_data(config)
-
-
-def curate_data_seg(curr_date, seg_list):
-    curate_data(curr_date, seg_list)
 
 
 if __name__ == '__main__':

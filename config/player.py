@@ -97,7 +97,7 @@ class PlayerGameStats:
     def create_playergame(cls, player_id, game_id, game_date, team):
         player_game_date = (player_id, game_id, game_date)
         if player_game_date in cls._playergames:
-            print(f"Player with ID {player_id}:{game_id}:{game_date} already exists.")
+            # print(f"Player with ID {player_id}:{game_id}:{game_date} already exists.")
             # tested..functions correctly.
             return cls._playergames[player_game_date]
         new_player_game = cls(player_id, game_id, game_date, team)

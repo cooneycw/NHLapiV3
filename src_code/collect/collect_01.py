@@ -1,6 +1,6 @@
 from bs4 import BeautifulSoup
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from src_code.utils.utils import create_dummy_player
 import os
 import re
@@ -450,7 +450,7 @@ def get_boxscore_list(config):
                         game = player_results['game']
                         player_obj.update_player(game[0], game[1], game[3 - i], game[4], player_results)
                         player_count += 1
-                        if player_count % 1000 == 0:
+                        if player_count % 20000 == 0:
                             print(f"Loaded {player_count} player game records...")
                     except Exception as e:
                         print(f"Error loading player data: {e}")
@@ -734,18 +734,46 @@ def get_playbyplay_data(config):
         # Create dictionaries for existing data for quick lookups
         existing_game_ids_shifts = set()
         for shift_data in prior_data_shifts:
-            # Extract game IDs from shift data (assuming each shift has game info)
+            # Extract game IDs from shift data
             if shift_data and len(shift_data) > 0:
+                found_game_id = False
                 for shift in shift_data:
                     if 'game_id' in shift:
                         existing_game_ids_shifts.add(shift['game_id'])
-                    break  # Only need to check the first shift to get game ID
+                        found_game_id = True
+                        break  # Break only after finding a game_id
 
-        existing_game_ids_plays = set(play_data['game_id'] for play_data in prior_data_plays if 'game_id' in play_data)
+                # If we didn't find a game_id in any shift, log a warning
+                if not found_game_id and len(shift_data) > 0:
+                    print(f"Warning: Shift data found without game_id. First shift: {shift_data[0]}")
+
+        # FIX: Check the structure of plays data and extract game IDs correctly
+        existing_game_ids_plays = set()
+        for play_list in prior_data_plays:
+            if play_list and len(play_list) > 0:
+                found_game_id = False
+                for play in play_list:
+                    if isinstance(play, dict) and 'game_id' in play:
+                        existing_game_ids_plays.add(play['game_id'])
+                        found_game_id = True
+                        break
+                if not found_game_id and len(play_list) > 0:
+                    print(f"Warning: Play list found without game_id. First play: {play_list[0]}")
+
         existing_game_ids_rosters = set()
         for roster_list in prior_data_game_rosters:
             if roster_list and len(roster_list) > 0:
-                existing_game_ids_rosters.add(roster_list[0]['game_id'])
+                if 'game_id' in roster_list[0]:
+                    existing_game_ids_rosters.add(roster_list[0]['game_id'])
+                else:
+                    print(f"Warning: Roster data found without game_id. First entry: {roster_list[0]}")
+
+        # Add diagnostic log to show counts and identify mismatches
+        print(f"Game IDs in shifts: {len(existing_game_ids_shifts)}")
+        print(f"Game IDs in plays: {len(existing_game_ids_plays)}")
+        print(f"Game IDs in rosters: {len(existing_game_ids_rosters)}")
+        print(
+            f"Total unique game IDs across all datasets: {len(existing_game_ids_shifts | existing_game_ids_plays | existing_game_ids_rosters)}")
 
         # Get the list of all completed games in the selected seasons
         all_completed_games = [game for game in config.Game.get_games()
@@ -758,7 +786,7 @@ def get_playbyplay_data(config):
         games_needing_playbyplay = []
         for game in all_completed_games:
             game_id = game[0]
-            # Check if this game needs any of the data types
+            # Modified to use AND logic - only process games missing from ALL datasets
             if (game_id not in existing_game_ids_shifts or
                     game_id not in existing_game_ids_plays or
                     game_id not in existing_game_ids_rosters):
@@ -785,7 +813,7 @@ def get_playbyplay_data(config):
             new_rosters_data = []
 
             # Batch the games to optimize memory usage
-            batch_size = min(100, len(games_needing_playbyplay))  # Adjust batch size as needed
+            batch_size = min(50, len(games_needing_playbyplay))  # Smaller batch size for ProcessPoolExecutor
             batches = [games_needing_playbyplay[i:i + batch_size] for i in
                        range(0, len(games_needing_playbyplay), batch_size)]
 
@@ -796,8 +824,8 @@ def get_playbyplay_data(config):
             for batch_idx, batch in enumerate(batches):
                 print(f"Processing batch {batch_idx + 1}/{len(batches)} ({len(batch)} games)...")
 
-                # Use ThreadPoolExecutor for I/O-bound operations
-                with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
+                # Use ProcessPoolExecutor for CPU-intensive tasks
+                with ProcessPoolExecutor(max_workers=config.max_workers) as executor:
                     # Submit batch of jobs
                     future_to_game = {executor.submit(internal_process_game, game, config): game for game in batch}
 
@@ -849,16 +877,22 @@ def get_playbyplay_data(config):
             # For plays data
             filtered_plays_data = []
             for play_data in prior_data_plays:
-                if 'game_id' in play_data:
-                    game_id = play_data['game_id']
-                    game_obj = config.Game.get_game(game_id)
-                    if game_obj and str(game_obj.season_id) in str_selected_seasons:
-                        filtered_plays_data.append(play_data)
+                if play_data and len(play_data) > 0:
+                    game_id = None
+                    for play in play_data:
+                        if 'game_id' in play:
+                            game_id = play['game_id']
+                            break
+
+                    if game_id:
+                        game_obj = config.Game.get_game(game_id)
+                        if game_obj and str(game_obj.season_id) in str_selected_seasons:
+                            filtered_plays_data.append(play_data)
 
             # For roster data
             filtered_rosters_data = []
             for roster_list in prior_data_game_rosters:
-                if roster_list and len(roster_list) > 0:
+                if roster_list and len(roster_list) > 0 and 'game_id' in roster_list[0]:
                     game_id = roster_list[0]['game_id']
                     game_obj = config.Game.get_game(game_id)
                     if game_obj and str(game_obj.season_id) in str_selected_seasons:
@@ -887,14 +921,23 @@ def get_playbyplay_data(config):
             # For plays: similar approach
             merged_plays_data = []
             for play_data in filtered_plays_data:
-                if 'game_id' in play_data and play_data['game_id'] not in game_ids_to_update:
+                game_id = None
+                if play_data and len(play_data) > 0:
+                    for play in play_data:
+                        if 'game_id' in play:
+                            game_id = play['game_id']
+                            break
+
+                if game_id and game_id not in game_ids_to_update:
                     merged_plays_data.append(play_data)
+
             merged_plays_data.extend(new_plays_data)
 
             # For game rosters: similar approach
             merged_rosters_data = []
             for roster_list in filtered_rosters_data:
-                if roster_list and len(roster_list) > 0 and roster_list[0]['game_id'] not in game_ids_to_update:
+                if roster_list and len(roster_list) > 0 and 'game_id' in roster_list[0] and roster_list[0][
+                    'game_id'] not in game_ids_to_update:
                     merged_rosters_data.append(roster_list)
             merged_rosters_data.extend(new_rosters_data)
 
@@ -933,7 +976,7 @@ def get_playbyplay_data(config):
         print(f'Processing {len(games)} games for play-by-play data...')
 
         # Batch the games to optimize memory usage
-        batch_size = min(100, len(games))  # Adjust batch size as needed
+        batch_size = min(50, len(games))  # Smaller batch size for ProcessPoolExecutor
         batches = [games[i:i + batch_size] for i in range(0, len(games), batch_size)]
 
         # Collect results
@@ -948,8 +991,8 @@ def get_playbyplay_data(config):
         for batch_idx, batch in enumerate(batches):
             print(f"Processing batch {batch_idx + 1}/{len(batches)} ({len(batch)} games)...")
 
-            # Use ThreadPoolExecutor for I/O-bound operations
-            with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
+            # Use ProcessPoolExecutor for CPU-intensive tasks
+            with ProcessPoolExecutor(max_workers=config.max_workers) as executor:
                 # Submit batch of jobs
                 future_to_game = {executor.submit(internal_process_game, game, config): game for game in batch}
 
@@ -1140,8 +1183,6 @@ def get_player_names(config):
 
         print(f'Saving final player name data ({len(save_data)} players)...')
         config.save_data(dimension, save_data)
-
-
 
 
 def internal_process_game(game, config):
@@ -1515,7 +1556,7 @@ def process_plays(data):
                                          'chlg-hm-missed-stoppage', 'home-timeout', 'chlg-vis-missed-stoppage',
                                          'puck-in-penalty-benches', 'ice-problem', 'net-dislodged-by-goaltender',
                                          'rink-repair', 'chlg-league-missed-stoppage', 'official-injury',
-                                         'chlg-hm-puck-over-glass',
+                                         'chlg-hm-puck-over-glass', 'premature-substitution',
                                          'chlg-league-off-side', 'switch-sides']:
                 print(f'\n')
                 print(f'collect play stoppage reason: {play["details"]["reason"]}')
