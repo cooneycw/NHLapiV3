@@ -22,13 +22,13 @@ def main():
         "reload_playernames": False,
         "reload_playbyplay": False,
         "reload_rosters": False,
-        "reload_curate": True,
+        "reload_curate": False,
     }
     config = Config(config_dict)
     config_model = ConfigModel()
     get_data(config)
     curate_data(config)
-    # model_data(config)
+    model_data(config)
     # model_visualization(config)
     # model, metrics = gnn(config, config_model)
 

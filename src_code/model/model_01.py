@@ -8,7 +8,7 @@ from src_code.utils.graph_utils import (
 from src_code.utils.display_graph_utils import visualize_game_graph
 from src_code.utils.save_graph_utils import save_graph, load_graph
 import copy
-import datetime
+from datetime import datetime
 
 
 def model_data(config):
@@ -49,7 +49,7 @@ def model_data(config):
     data_shifts = config.load_data(dimension_shifts)
     data_plays = config.load_data(dimension_plays)
     data_game_roster = config.load_data(dimension_game_rosters)
-    data_curated, _ = config.load_data(dimension_curated)  # Load the curated games list
+    data_curated = config.load_data(dimension_curated)  # Load the curated games list
 
     # Check if curated data exists and convert to set for efficient lookups
     processed_game_ids = set()
