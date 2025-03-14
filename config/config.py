@@ -14,7 +14,7 @@ class Config:
         known_params = {"verbose", "produce_csv", "days_list", "seg_games", "season_count",
                         "delete_files", "reload_seasons", "reload_teams", "reload_games",
                         "update_game_statuses", "reload_boxscores", "reload_players",
-                        "reload_playernames", "reload_playbyplay", "reload_rosters"}
+                        "reload_playernames", "reload_playbyplay", "reload_rosters", "reload_curate"}
 
         unknown_params = set(input_dict.keys()) - known_params
         if unknown_params:
@@ -75,6 +75,7 @@ class Config:
         self.reload_playernames = input_dict.get("reload_playernames", False)
         self.reload_playbyplay = input_dict.get("reload_playbyplay", False)
         self.reload_rosters = input_dict.get("reload_rosters", False)
+        self.reload_curate = input_dict.get("reload_curate", False)
         self.Season = Season
         self.Team = Team
         self.Game = Game

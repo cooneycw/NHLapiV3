@@ -426,7 +426,7 @@ def get_boxscore_list(config):
             game_obj = config.Game.get_game(game_results['id'])
             # Only process games from selected seasons - ensure both are same type for comparison
             if (game_obj and game_obj.game_date.date() < config.curr_date and
-                    str(game_obj.season_id) in [str(s) for s in selected_seasons]):  # Changed from season to season_id
+                    str(game_obj.season_id) in [str(s) for s in selected_seasons]):
                 game_obj.update_game(game_results)
                 loaded_game_count += 1
         print(f"Loaded {loaded_game_count} games from selected seasons")
@@ -456,7 +456,6 @@ def get_boxscore_list(config):
                         print(f"Error loading player data: {e}")
         print(f"Loaded {player_count} player game records from selected seasons")
 
-        # Rest of the function remains the same...
         # Find all completed games from selected seasons that aren't in our cache yet
         # Convert to strings for comparison
         str_selected_seasons = [str(s) for s in selected_seasons]
@@ -468,15 +467,13 @@ def get_boxscore_list(config):
         if games_needing_boxscores:
             print(f'Found {len(games_needing_boxscores)} new games that need boxscore data...')
 
-            # Fetch boxscores only for the new games
+            # IMPORTANT: Start with ALL prior data from selected seasons
             # For filtering cached data, ensure type-safe comparisons
-            save_game_results = [g for g in prior_data_games
-                                 if g['id'] in cached_game_ids and
-                                 str(g.get('season_id', g.get('game_date', '').split('-')[
-                                     0])) in str_selected_seasons]  # Changed from season to season_id
+            save_game_results = list(prior_data_games)  # Make a complete copy of ALL prior games
+            save_player_results = list(prior_data_players)  # Make a complete copy of ALL prior player data
 
-            save_player_results = [p for p in prior_data_players
-                                   if str(p['game'][4]) in str_selected_seasons]
+            print(
+                f'Starting with all existing data: {len(save_game_results)} games, {len(save_player_results)} player entries')
 
             with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
                 # Use a list to collect results safely
@@ -496,6 +493,14 @@ def get_boxscore_list(config):
                             print(f"Processed {completed}/{len(games_needing_boxscores)} games...")
                     except Exception as e:
                         print(f"Error processing game in executor: {e}")
+
+            # Verify data integrity before saving
+            game_ids_in_results = {gr['id'] for gr in save_game_results}
+            expected_game_ids = cached_game_ids.union({g[0] for g in games_needing_boxscores})
+            missing_games = expected_game_ids - game_ids_in_results
+
+            if missing_games:
+                print(f"WARNING: {len(missing_games)} games will be missing after save: {missing_games}")
 
             # Save the updated data
             print(

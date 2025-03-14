@@ -15,7 +15,11 @@ import pandas as pd
 
 
 def curate_data(config):
-    """Main function for parallel game data curation."""
+    """Main function for parallel game data curation with incremental updates."""
+    import os
+    import pickle
+
+    print("Gathering game data for curation...")
     # Load data
     dimension_names = "all_names"
     dimension_shifts = "all_shifts"
@@ -24,6 +28,29 @@ def curate_data(config):
     dimension_games = "all_boxscores"
     dimension_players = "all_players"
 
+    # Create processed games tracking file path
+    processed_games_file = os.path.join(config.current_path, "storage", "pickles", "curated_games.pkl")
+
+    # Check if we need to do a full reload or incremental update
+    do_full_reload = getattr(config, "reload_curate", False)
+
+    # Load previously processed games
+    if not do_full_reload and os.path.exists(processed_games_file):
+        try:
+            with open(processed_games_file, 'rb') as f:
+                processed_games = pickle.load(f)
+            print(f"Using cached curation data ({len(processed_games)} games)...")
+        except Exception as e:
+            print(f"Error loading processed games file: {e}")
+            processed_games = set()
+    else:
+        if do_full_reload:
+            print("Reload requested. Reprocessing all games.")
+        else:
+            print("No valid cached curation data. Processing all games.")
+        processed_games = set()
+
+    # Load data
     data_names = config.load_data(dimension_names)
     data_games = config.load_data(dimension_games)
     data_players = config.load_data(dimension_players)
@@ -31,32 +58,132 @@ def curate_data(config):
     data_plays = config.load_data(dimension_plays)
     data_game_roster = config.load_data(dimension_game_rosters)
 
+    # Identify games in each dataset
+    play_game_ids = set()
+    for i, plays in enumerate(data_plays):
+        if plays and len(plays) > 0 and 'game_id' in plays[0]:
+            play_game_ids.add(plays[0]['game_id'])
+
+    boxscore_game_ids = set()
+    for boxscore in data_games:
+        if 'id' in boxscore:
+            boxscore_game_ids.add(boxscore['id'])
+
+    shift_game_ids = set()
+    for shifts in data_shifts:
+        if shifts and len(shifts) > 0 and 'game_id' in shifts[0]:
+            shift_game_ids.add(shifts[0]['game_id'])
+
+    roster_game_ids = set()
+    for roster in data_game_roster:
+        if roster and len(roster) > 0 and 'game_id' in roster[0]:
+            roster_game_ids.add(roster[0]['game_id'])
+
+    # Find games that have data in all datasets
+    available_games = play_game_ids.intersection(boxscore_game_ids, shift_game_ids, roster_game_ids)
+
+    # Filter out games already processed unless doing a full reload
+    if do_full_reload:
+        games_to_process = available_games
+    else:
+        games_to_process = available_games - processed_games
+
+    if not games_to_process:
+        print("No new games to process for curation.")
+        return
+
+    print(f"Found {len(games_to_process)} games that need curation...")
+
+    # Create mappings from game_id to data index
+    play_map = {}
+    for i, plays in enumerate(data_plays):
+        if plays and len(plays) > 0 and 'game_id' in plays[0]:
+            play_map[plays[0]['game_id']] = i
+
+    game_map = {}
+    for i, game in enumerate(data_games):
+        if 'id' in game:
+            game_map[game['id']] = i
+
+    shift_map = {}
+    for i, shifts in enumerate(data_shifts):
+        if shifts and len(shifts) > 0 and 'game_id' in shifts[0]:
+            shift_map[shifts[0]['game_id']] = i
+
+    roster_map = {}
+    for i, roster in enumerate(data_game_roster):
+        if roster and len(roster) > 0 and 'game_id' in roster[0]:
+            roster_map[roster[0]['game_id']] = i
+
+    # Create process arguments for each game to process
+    process_args = []
+    for game_id in sorted(games_to_process):
+        if (game_id in play_map and game_id in game_map and
+                game_id in shift_map and game_id in roster_map):
+            process_args.append((
+                play_map[game_id],
+                data_plays[play_map[game_id]],
+                config,
+                data_games[game_map[game_id]],
+                data_shifts[shift_map[game_id]],
+                data_game_roster[roster_map[game_id]],
+                None  # Will be replaced with the queue in the multiprocessing section
+            ))
+        else:
+            print(f"Warning: Missing data for game {game_id}, skipping.")
+
+    # Verify we have games to process
+    if not process_args:
+        print("No games with complete data to process.")
+        return
+
+    print(f"Processing {len(process_args)} games...")
+
     # Create manager for shared resources
     with mp.Manager() as manager:
         # Create managed queue
         result_queue = manager.Queue()
 
+        # Update process args with the queue
+        process_args = [(args[0], args[1], args[2], args[3], args[4], args[5], result_queue)
+                        for args in process_args]
+
         # Start reporter process
         reporter_process = mp.Process(
             target=validation_reporter,
-            args=(result_queue, len(data_plays))
+            args=(result_queue, len(process_args))
         )
         reporter_process.start()
 
         # Create pool of workers
-        with mp.Pool(processes=int(0.35* config.max_workers)) as pool:
+        with mp.Pool(processes=max(1, int(0.35 * config.max_workers))) as pool:
             # Process games in parallel
-            pool.starmap(
-                process_single_game,
-                [(i, game, config, data_games, data_shifts, data_game_roster, result_queue)
-                 for i, game in enumerate(data_plays)]
-            )
+            pool.starmap(process_single_game, process_args)
 
             # Signal reporter that all games are processed
             result_queue.put(None)  # Sentinel value
 
             # Wait for reporter to finish
             reporter_process.join()
+
+    # Update processed games list with newly processed games
+    newly_processed = set()
+    for args in process_args:
+        game = args[1]  # data_plays for this game
+        if game and len(game) > 0 and 'game_id' in game[0]:
+            newly_processed.add(game[0]['game_id'])
+
+    processed_games.update(newly_processed)
+
+    # Save updated processed games list
+    try:
+        with open(processed_games_file, 'wb') as f:
+            pickle.dump(processed_games, f)
+        print(f"Saved curation data for {len(processed_games)} total processed games.")
+    except Exception as e:
+        print(f"Error saving processed games file: {e}")
+
+    print(f"Completed processing {len(newly_processed)} new games for curation.")
 
 
 def process_single_game(game_index: int,
@@ -417,27 +544,43 @@ def validation_reporter(result_queue: Queue, total_games: int) -> None:
 
 def report_result(result):
     """Helper function to report a single game result."""
+    if not result:
+        print("Warning: Null result received in report_result")
+        return
+
+    if 'team_sums' not in result or result['team_sums'] is None:
+        game_id = result.get('game_id', 'unknown')
+        print(f"\ngame_id: {game_id} - Missing team_sums data")
+        return
+
     if not result['all_good']:
         # Print validation failure details
-        print(f"\ngame_id: {result['game_id']}  toi: {result['toi_sum']} {result['game_data']['playbyplay']}")
+        print(
+            f"\ngame_id: {result['game_id']}  toi: {result['toi_sum']} {result['game_data'].get('playbyplay', 'N/A')}")
         print("reasons:")
         for reason in result['reasons']:
             print(f"  {reason['type']}: expected {reason['expected']}, "
                   f"got {reason['actual']}, diff {reason['difference']}")
-        print(f"shift data: {result['team_sums']['away']}  {result['team_sums']['home']}")
-        print(f"away_goals {result['game_data']['away_goals']} "
-              f"away_sog {result['game_data']['away_sog']} "
-              f"away_pim {result['game_data']['away_pim']} "
-              f"away_takeaways {result['game_data']['away_take']} "
-              f"away_giveaways {result['game_data']['away_give']}")
-        print(f"home_goals {result['game_data']['home_goals']} "
-              f"home_sog {result['game_data']['home_sog']} "
-              f"home_pim {result['game_data']['home_pim']} "
-              f"home_takeaways {result['game_data']['home_take']} "
-              f"home_giveaways {result['game_data']['home_give']}")
+
+        try:
+            print(f"shift data: {result['team_sums']['away']}  {result['team_sums']['home']}")
+            print(f"away_goals {result['game_data']['away_goals']} "
+                  f"away_sog {result['game_data']['away_sog']} "
+                  f"away_pim {result['game_data']['away_pim']} "
+                  f"away_takeaways {result['game_data']['away_take']} "
+                  f"away_giveaways {result['game_data']['away_give']}")
+            print(f"home_goals {result['game_data']['home_goals']} "
+                  f"home_sog {result['game_data']['home_sog']} "
+                  f"home_pim {result['game_data']['home_pim']} "
+                  f"home_takeaways {result['game_data']['home_take']} "
+                  f"home_giveaways {result['game_data']['home_give']}")
+        except (KeyError, TypeError) as e:
+            print(f"Error printing detailed results: {e}")
+
     elif result['game_id'] % 20 == 0:
         # Print success message for every 20th game
-        print(f"\ngame_id: {result['game_id']}  toi: {result['toi_sum']} {result['game_data']['playbyplay']}")
+        print(
+            f"\ngame_id: {result['game_id']}  toi: {result['toi_sum']} {result['game_data'].get('playbyplay', 'N/A')}")
         print("game totals confirmed")
         print("\n")
 
