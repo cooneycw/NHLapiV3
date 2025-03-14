@@ -16,8 +16,6 @@ import pandas as pd
 
 def curate_data(config):
     """Main function for parallel game data curation with incremental updates."""
-    import os
-    import pickle
 
     print("Gathering game data for curation...")
     # Load data
@@ -33,13 +31,12 @@ def curate_data(config):
     do_full_reload = getattr(config, "reload_curate", False)
 
     if not do_full_reload:
-        processed_games_list, _ = config.load_data(dimension_curated)
-        if processed_games_list is None:
+        processed_games = config.load_data(dimension_curated)
+        if processed_games is None:
             processed_games = set()
             print("No valid cached curation data. Processing all games.")
         else:
-            # Convert the sorted list back to a set for efficient lookups
-            processed_games = set(processed_games_list)
+            processed_games = set(processed_games)  # Convert to set for efficient lookups
             print(f"Using cached curation data ({len(processed_games)} games)...")
     else:
         print("Reload requested. Reprocessing all games.")
@@ -53,9 +50,9 @@ def curate_data(config):
     data_plays = config.load_data(dimension_plays)
     data_game_roster = config.load_data(dimension_game_rosters)
 
-    # Identify games in each dataset
+    # Identify games in each dataset and determine which ones to process
     play_game_ids = set()
-    for i, plays in enumerate(data_plays):
+    for plays in data_plays:
         if plays and len(plays) > 0 and 'game_id' in plays[0]:
             play_game_ids.add(plays[0]['game_id'])
 
@@ -115,13 +112,19 @@ def curate_data(config):
     for game_id in sorted(games_to_process):
         if (game_id in play_map and game_id in game_map and
                 game_id in shift_map and game_id in roster_map):
+            # We'll directly pass the actual data rather than indices
+            play_data = data_plays[play_map[game_id]]
+            game_data = data_games[game_map[game_id]]
+            shift_data = data_shifts[shift_map[game_id]]
+            roster_data = data_game_roster[roster_map[game_id]]
+
             process_args.append((
-                play_map[game_id],
-                data_plays[play_map[game_id]],
+                game_id,  # Use game_id instead of index
+                play_data,
                 config,
-                data_games[game_map[game_id]],
-                data_shifts[shift_map[game_id]],
-                data_game_roster[roster_map[game_id]],
+                game_data,
+                shift_data,
+                roster_data,
                 None  # Will be replaced with the queue in the multiprocessing section
             ))
         else:
@@ -164,27 +167,26 @@ def curate_data(config):
     # Update processed games list with newly processed games
     newly_processed = set()
     for args in process_args:
-        game = args[1]  # data_plays for this game
-        if game and len(game) > 0 and 'game_id' in game[0]:
-            newly_processed.add(game[0]['game_id'])
+        game_id = args[0]  # Now this is the actual game_id
+        newly_processed.add(game_id)
 
     processed_games.update(newly_processed)
-    # After processing games, save the updated processed_games
-    config.save_data(dimension_curated, processed_games)
+    # After processing games, save the updated processed_games as a list
+    config.save_data(dimension_curated, sorted(list(processed_games)))
     print(f"Completed processing {len(newly_processed)} new games for curation.")
 
 
-def process_single_game(game_index: int,
+def process_single_game(game_id: int,
                         game: Dict,
                         config: Any,
-                        data_games: List[Dict],
-                        data_shifts: List[Dict],
-                        data_game_roster: List[Dict],
+                        game_data: Dict,
+                        shift_data: List[Dict],
+                        roster_data: List[Dict],
                         queue: Queue) -> None:
     """Process a single game and put validation results in the queue."""
     try:
         i_shift = 0
-        game_id = []
+        game_ids = []
         game_date = []
         away_teams = []
         home_teams = []
@@ -200,11 +202,11 @@ def process_single_game(game_index: int,
         home_skaters = []
         player_data = []
 
-        away_team = data_games[game_index]['awayTeam']
-        home_team = data_games[game_index]['homeTeam']
-        away_players, home_players = create_roster_dicts(data_game_roster[game_index], away_team, home_team)
-        away_players_sorted, home_players_sorted = create_ordered_roster(data_game_roster[game_index], away_team,
-                                                                         home_team)
+        # Use the directly passed game_data instead of indexing with game_index
+        away_team = game_data['awayTeam']
+        home_team = game_data['homeTeam']
+        away_players, home_players = create_roster_dicts(roster_data, away_team, home_team)
+        away_players_sorted, home_players_sorted = create_ordered_roster(roster_data, away_team, home_team)
         last_event = None
 
         for i_event, event in enumerate(game):
@@ -217,7 +219,7 @@ def process_single_game(game_index: int,
             game_time_event = period_time_to_game_time(event['period'], event['game_time'])
 
             while True:
-                compare_shift = data_shifts[game_index][i_shift]
+                compare_shift = shift_data[i_shift]
                 shift_details = config.shift_categ.get(compare_shift['event_type'])
 
                 if shift_details is None:
@@ -247,47 +249,47 @@ def process_single_game(game_index: int,
                     toi, player_stats = process_faceoff(event, period_cd, compare_shift, away_players, home_players)
                 elif event_details['event_name'] == 'hit':
                     toi, player_stats = process_hit(event, period_cd, compare_shift, away_players, home_players,
-                                                    last_event, game_time_event)
+                                                   last_event, game_time_event)
                 elif event_details['event_name'] == 'giveaway':
                     toi, player_stats = process_giveaway(event, period_cd, compare_shift, away_players, home_players,
-                                                         last_event, game_time_event)
+                                                        last_event, game_time_event)
                 elif event_details['event_name'] == 'takeaway':
                     toi, player_stats = process_takeaway(event, period_cd, compare_shift, away_players, home_players,
-                                                         last_event, game_time_event)
+                                                        last_event, game_time_event)
                 elif event_details['event_name'] == 'goal':
                     toi, player_stats = process_goal(event, period_cd, compare_shift, away_players, home_players,
-                                                     away_players_sorted, home_players_sorted, last_event,
-                                                     game_time_event)
+                                                    away_players_sorted, home_players_sorted, last_event,
+                                                    game_time_event)
                 elif event_details['event_name'] == 'shot-on-goal':
                     toi, player_stats = process_shot_on_goal(config.verbose, event, period_cd, compare_shift,
-                                                             away_players, home_players, last_event, game_time_event)
+                                                            away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'missed-shot':
                     toi, player_stats = process_missed_shot(event, period_cd, compare_shift, away_players, home_players,
-                                                            last_event, game_time_event)
+                                                           last_event, game_time_event)
                 elif event_details['event_name'] == 'blocked-shot':
                     toi, player_stats = process_blocked_shot(event, period_cd, compare_shift, away_players,
-                                                             home_players, away_players_sorted, home_players_sorted,
-                                                             last_event, game_time_event)
+                                                            home_players, away_players_sorted, home_players_sorted,
+                                                            last_event, game_time_event)
                 elif event_details['event_name'] == 'penalty':
                     toi, player_stats = process_penalty(config.verbose, event, period_cd, compare_shift,
-                                                        away_players_sorted, home_players_sorted, last_event,
-                                                        game_time_event)
+                                                       away_players_sorted, home_players_sorted, last_event,
+                                                       game_time_event)
                 elif event_details['event_name'] == 'stoppage':
                     toi, player_stats = process_stoppage(event, period_cd, compare_shift, away_players, home_players,
-                                                         last_event, game_time_event)
+                                                        last_event, game_time_event)
                 elif event_details['event_name'] == 'period-end':
                     toi, player_stats = process_period_end(event, period_cd, compare_shift, away_players, home_players,
-                                                           last_event, game_time_event)
+                                                          last_event, game_time_event)
                 elif event_details['event_name'] == 'delayed-penalty':
                     toi, player_stats = process_delayed_penalty(event, period_cd, compare_shift, away_players,
-                                                                home_players, last_event, game_time_event)
+                                                               home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'penalty-shot-missed':
                     toi, player_stats = process_penalty_shot(event, period_cd, compare_shift, away_players_sorted,
-                                                             home_players_sorted, last_event, game_time_event)
+                                                            home_players_sorted, last_event, game_time_event)
 
                 if sum(toi) >= 0 or period_cd == 2:
-                    game_id.append(game[i_event]['game_id'])
-                    game_date.append(data_games[game_index]['game_date'])
+                    game_ids.append(game[i_event]['game_id'])
+                    game_date.append(game_data['game_date'])
                     away_teams.append(away_team)
                     home_teams.append(home_team)
                     period_id.append(event['period'])
@@ -307,7 +309,7 @@ def process_single_game(game_index: int,
 
         # Create game data dictionary
         data = {
-            'game_id': game_id,
+            'game_id': game_ids,
             'game_date': game_date,
             'away_teams': away_teams,
             'home_teams': home_teams,
@@ -325,7 +327,7 @@ def process_single_game(game_index: int,
         }
 
         # Save game data
-        save_game_data(data, config.file_paths["game_output_pkl"] + f'{str(game_id[0])}')
+        save_game_data(data, config.file_paths["game_output_pkl"] + f'{str(game_id)}')
 
         # Create DataFrame
         df_data = data.copy()
@@ -418,15 +420,15 @@ def process_single_game(game_index: int,
 
         # Create validation result
         validation_result = create_validation_result(
-            game_id=game_id[0],
+            game_id=game_id,  # Use the passed game_id directly
             team_sums=team_sums,
-            game_data=data_games[game_index],
+            game_data=game_data,  # Use the directly passed game_data
             toi_sum=sum(df["time_on_ice"].sum())
         )
 
         # Save to CSV
         if config.produce_csv:
-            df.to_csv(config.file_paths['game_output_csv'] + f'{str(game_id[0])}.csv', na_rep='', index=False)
+            df.to_csv(config.file_paths['game_output_csv'] + f'{str(game_id)}.csv', na_rep='', index=False)
 
         # Put validation result in queue
         queue.put(validation_result)
@@ -434,7 +436,7 @@ def process_single_game(game_index: int,
     except Exception as e:
         # Handle any errors during processing
         error_result = {
-            'game_id': game[0]['game_id'] if game else None,
+            'game_id': game_id,  # Use the passed game_id directly
             'all_good': False,
             'reasons': [{
                 'type': 'processing_error',
@@ -443,7 +445,7 @@ def process_single_game(game_index: int,
                 'difference': 'error occurred'
             }],
             'team_sums': None,
-            'game_data': data_games[game_index] if game_index < len(data_games) else None,
+            'game_data': game_data,  # Use the directly passed game_data
             'toi_sum': None
         }
         queue.put(error_result)
@@ -529,7 +531,6 @@ def validation_reporter(result_queue: Queue, total_games: int) -> None:
             # Update next expected game
             next_game_to_report = result['game_id'] + 1
 
-
 def report_result(result):
     """Helper function to report a single game result."""
     if not result:
@@ -543,14 +544,13 @@ def report_result(result):
 
     if not result['all_good']:
         # Print validation failure details
-        print(
-            f"\ngame_id: {result['game_id']}  toi: {result['toi_sum']} {result['game_data'].get('playbyplay', 'N/A')}")
-        print("reasons:")
-        for reason in result['reasons']:
-            print(f"  {reason['type']}: expected {reason['expected']}, "
-                  f"got {reason['actual']}, diff {reason['difference']}")
-
         try:
+            print(f"\ngame_id: {result['game_id']}  toi: {result['toi_sum']} {result['game_data'].get('playbyplay', 'N/A')}")
+            print("reasons:")
+            for reason in result['reasons']:
+                print(f"  {reason['type']}: expected {reason['expected']}, "
+                      f"got {reason['actual']}, diff {reason['difference']}")
+
             print(f"shift data: {result['team_sums']['away']}  {result['team_sums']['home']}")
             print(f"away_goals {result['game_data']['away_goals']} "
                   f"away_sog {result['game_data']['away_sog']} "
@@ -567,8 +567,7 @@ def report_result(result):
 
     elif result['game_id'] % 20 == 0:
         # Print success message for every 20th game
-        print(
-            f"\ngame_id: {result['game_id']}  toi: {result['toi_sum']} {result['game_data'].get('playbyplay', 'N/A')}")
+        print(f"\ngame_id: {result['game_id']}  toi: {result['toi_sum']} {result['game_data'].get('playbyplay', 'N/A')}")
         print("game totals confirmed")
         print("\n")
 
