@@ -55,6 +55,7 @@ class Config:
             "all_shifts": os.path.join(self.current_path, "storage", "pickles", "all_shifts.pkl"),
             "all_plays": os.path.join(self.current_path, "storage", "pickles", "all_plays.pkl"),
             "all_game_rosters": os.path.join(self.current_path, "storage", "pickles", "all_game_rosters.pkl"),
+            "all_curated": os.path.join(self.current_path, "storage", "pickles", "all_curated.pkl"),
             "game_output_csv": os.path.join(self.current_path, "storage", "output", "csv", "game_output"),
             "game_output_pkl": os.path.join(self.current_path, "storage", "output", "pkl", "game_output"),
             "game_output_jpg": os.path.join(self.current_path, "storage", "output", "jpg"),
@@ -142,7 +143,7 @@ class Config:
                     sorted_data = sorted(data, key=lambda x: x['id'])
                 elif dimension == "all_plays":
                     sorted_data = sorted(data, key=lambda x: x[0]['game_id'] if (
-                                x and len(x) > 0 and 'game_id' in x[0]) else 0)
+                            x and len(x) > 0 and 'game_id' in x[0]) else 0)
                 elif dimension == "all_shifts":
                     # For shifts, find the game_id in the first item that has it
                     def get_shift_game_id(shift_list):
@@ -157,9 +158,12 @@ class Config:
                 elif dimension == "all_game_rosters":
                     # For rosters, use the game_id from the first item if available
                     sorted_data = sorted(data, key=lambda x: x[0]['game_id'] if (
-                                x and len(x) > 0 and 'game_id' in x[0]) else 0)
+                            x and len(x) > 0 and 'game_id' in x[0]) else 0)
                 else:
                     sorted_data = data
+            elif dimension == "all_curated":
+                # For the curated games set, convert to a sorted list
+                sorted_data = sorted(list(data))
             else:
                 # For other data types that don't need sorting
                 sorted_data = data

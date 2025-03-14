@@ -8,9 +8,29 @@ from src_code.utils.graph_utils import (
 from src_code.utils.display_graph_utils import visualize_game_graph
 from src_code.utils.save_graph_utils import save_graph, load_graph
 import copy
+import datetime
 
 
 def model_data(config):
+    """
+    Process curated game data and build a graph model for analysis.
+
+    This function:
+    1. Loads all required datasets including the curated games list
+    2. Filters games to only include those that have been curated
+    3. Processes the filtered games in chronological order
+    4. Builds a graph model with nodes for teams, players, games and performances
+    5. Calculates historical statistics for analysis
+
+    Args:
+        config: A Config object containing settings and paths
+
+    Returns:
+        None - The processed graph is saved to disk
+    """
+    print("Starting model data processing...")
+
+    # Define all data dimensions
     dimension_names = "all_names"
     dimension_teams = "all_teams"
     dimension_shifts = "all_shifts"
@@ -18,7 +38,10 @@ def model_data(config):
     dimension_game_rosters = "all_game_rosters"
     dimension_games = "all_boxscores"
     dimension_players = "all_players"
+    dimension_curated = "all_curated"  # Curated games dimension
 
+    # Load all required datasets
+    print("Loading datasets...")
     data_names = config.load_data(dimension_names)
     data_games = config.load_data(dimension_games)
     data_teams = config.load_data(dimension_teams)
@@ -26,68 +49,134 @@ def model_data(config):
     data_shifts = config.load_data(dimension_shifts)
     data_plays = config.load_data(dimension_plays)
     data_game_roster = config.load_data(dimension_game_rosters)
+    data_curated, _ = config.load_data(dimension_curated)  # Load the curated games list
 
+    # Check if curated data exists and convert to set for efficient lookups
+    processed_game_ids = set()
+    if data_curated:
+        processed_game_ids = set(data_curated)
+        print(f"Loaded {len(processed_game_ids)} curated game IDs.")
+    else:
+        print("Warning: No curated games data found. Processing will continue with no games.")
+
+    # Filter games to only include those that have been curated
+    filtered_games = []
+    for game in data_games:
+        if 'id' in game and game['id'] in processed_game_ids:
+            filtered_games.append(game)
+
+    print(f"Using {len(filtered_games)} out of {len(data_games)} games that have been curated.")
+
+    # Sort filtered games by game_date for chronological processing
+    filtered_games.sort(key=lambda x: x['game_date'] if isinstance(x['game_date'], datetime)
+    else datetime.strptime(x['game_date'], '%Y-%m-%d'))
+
+    if filtered_games:
+        print(
+            f"Games sorted chronologically from {filtered_games[0]['game_date']} to {filtered_games[-1]['game_date']}")
+
+    # Create player dictionary from names data
     player_list, player_dict = create_player_dict(data_names)
 
-    # input_graph = create_graph()
+    # Initialize the graph
     data_graph = create_graph()
 
+    # Add team nodes
+    print("Adding team nodes to graph...")
     for i, team in enumerate(data_teams):
         add_team_node(data_graph, team)
 
+    # Add player nodes
+    print("Adding player nodes to graph...")
     for j, player in enumerate(player_list):
         add_player_node(data_graph, player, player_dict)
 
-    process_games_chronologically(data_graph, data_games)
+    # Process games chronologically to build basic graph structure
+    print("Processing games chronologically...")
+    process_games_chronologically(data_graph, filtered_games)
 
+    # Create a mapping from game ID to index for efficient lookups
+    game_id_to_index = {game['id']: i for i, game in enumerate(filtered_games)}
+
+    # Filter and sort game rosters to match filtered games
+    filtered_game_rosters = []
+    for roster in data_game_roster:
+        if roster and len(roster) > 0 and 'game_id' in roster[0] and roster[0]['game_id'] in processed_game_ids:
+            filtered_game_rosters.append(roster)
+
+    # Sort rosters to match the order of filtered_games
+    game_id_to_roster = {roster[0]['game_id']: roster for roster in filtered_game_rosters if roster and len(roster) > 0}
+    sorted_game_rosters = []
+    for game in filtered_games:
+        if game['id'] in game_id_to_roster:
+            sorted_game_rosters.append(game_id_to_roster[game['id']])
+
+    print(f"Matched {len(sorted_game_rosters)} game rosters to filtered games.")
+
+    # Add player game performances
+    print("Adding player game performances...")
     team_game_maps = []
-    for l, roster in enumerate(data_game_roster):
+    for l, roster in enumerate(sorted_game_rosters):
+        if l % 50 == 0:
+            print(f"Processing roster {l} of {len(sorted_game_rosters)}")
         team_game_map = add_player_game_performance(data_graph, roster)
         team_game_maps.append(team_game_map)
 
-    print(data_graph)
-    shifts = []
+    print(f"Graph now has {len(data_graph.nodes)} nodes and {len(data_graph.edges)} edges")
 
-    for m, game in enumerate(data_games):
+    # Create mapping from game ID to team_game_map index
+    game_id_to_map_index = {}
+    for i, roster in enumerate(sorted_game_rosters):
+        if roster and len(roster) > 0 and 'game_id' in roster[0]:
+            game_id_to_map_index[roster[0]['game_id']] = i
+
+    # Process shift data for each game
+    print("Processing shift data for each game...")
+    shifts = []
+    processed_count = 0
+    error_count = 0
+
+    for m, game in enumerate(filtered_games):
         verbose = False
         if (m % 40 == 0) and (m != 0):
-            print(f'game {m} of {len(data_games)} ({(m / len(data_games)) * 100:.1f}%)')
+            print(f'Game {m} of {len(filtered_games)} ({(m / len(filtered_games)) * 100:.1f}%)')
             verbose = True
-        # show_single_game_trimmed(data_graph, game['id'])
-        shift_data = load_game_data(config.file_paths["game_output_pkl"] + f'{str(game["id"])}')
 
-        # for q, player_dat in enumerate(shift_data['player_data']):
-        #
-        #     goal_instances = find_goals(player_dat)
-        #     for goal in goal_instances:
-        #         print(
-        #             f"Goal found - shift index: {q} Player Index: {goal['player_index']}, Player ID: {goal['player_id']}, Team: {goal['player_team']}, Periods: {goal['goal_periods']}")
-        process_shift_data(data_graph, verbose, team_game_maps[m], shift_data)
-        shifts.append(shift_data)
-        update_game_outcome(data_graph, game['id'], game)
+        try:
+            # Load the shift data from the curated game file
+            shift_data = load_game_data(config.file_paths["game_output_pkl"] + f'{str(game["id"])}')
 
-        # for player in data_game_roster[m]:
-        #     update_player_temporal_features(
-        #         data_graph,
-        #         player['player_id'],
-        #         str(game['id']),
-        #         game['game_date']
-        #     )
+            # Get the correct team_game_map index for this game
+            if game['id'] in game_id_to_map_index:
+                map_index = game_id_to_map_index[game['id']]
+                process_shift_data(data_graph, verbose, team_game_maps[map_index], shift_data)
+                shifts.append(shift_data)
+                update_game_outcome(data_graph, game['id'], game)
+                processed_count += 1
+            else:
+                print(f"Warning: Could not find matching team_game_map for game {game['id']}")
+                error_count += 1
+        except Exception as e:
+            print(f"Error processing game {game['id']}: {str(e)}")
+            error_count += 1
 
-        # Create visualization after all game data is processed and updated
-        # if m % 10 == 0:
-        #     visualize_game_graph(data_graph, game['id'],
-        #                          output_path=f"{config.file_paths['game_output_jpg']}/game_{game['id']}_network_{game['game_date']}.jpg")
+    print(f"Processed shift data for {processed_count} games successfully. {error_count} games had errors.")
 
-    # After all game and player data is processed
+    # Build indexes for efficient lookups
     print("Building performance mapping indexes...")
     build_game_to_pgp_index(data_graph)
     build_game_to_pgp_edges_index(data_graph)
 
-    # Then calculate historical stats
-    print("Processing historic game stats...")
+    # Calculate historical statistics
+    print("Processing historical game stats...")
     data_graph = calculate_historical_stats(config, data_graph)
+
+    # Save the completed graph
+    print("Saving graph to disk...")
     save_graph(data_graph, config.file_paths["graph"])
+
+    print("Model data processing complete!")
+    return data_graph
 
 
 def model_visualization(config):

@@ -27,27 +27,22 @@ def curate_data(config):
     dimension_game_rosters = "all_game_rosters"
     dimension_games = "all_boxscores"
     dimension_players = "all_players"
-
-    # Create processed games tracking file path
-    processed_games_file = os.path.join(config.current_path, "storage", "pickles", "curated_games.pkl")
+    dimension_curated = "all_curated"  # New dimension for curated games
 
     # Check if we need to do a full reload or incremental update
     do_full_reload = getattr(config, "reload_curate", False)
 
-    # Load previously processed games
-    if not do_full_reload and os.path.exists(processed_games_file):
-        try:
-            with open(processed_games_file, 'rb') as f:
-                processed_games = pickle.load(f)
-            print(f"Using cached curation data ({len(processed_games)} games)...")
-        except Exception as e:
-            print(f"Error loading processed games file: {e}")
+    if not do_full_reload:
+        processed_games_list, _ = config.load_data(dimension_curated)
+        if processed_games_list is None:
             processed_games = set()
-    else:
-        if do_full_reload:
-            print("Reload requested. Reprocessing all games.")
-        else:
             print("No valid cached curation data. Processing all games.")
+        else:
+            # Convert the sorted list back to a set for efficient lookups
+            processed_games = set(processed_games_list)
+            print(f"Using cached curation data ({len(processed_games)} games)...")
+    else:
+        print("Reload requested. Reprocessing all games.")
         processed_games = set()
 
     # Load data
@@ -174,15 +169,8 @@ def curate_data(config):
             newly_processed.add(game[0]['game_id'])
 
     processed_games.update(newly_processed)
-
-    # Save updated processed games list
-    try:
-        with open(processed_games_file, 'wb') as f:
-            pickle.dump(processed_games, f)
-        print(f"Saved curation data for {len(processed_games)} total processed games.")
-    except Exception as e:
-        print(f"Error saving processed games file: {e}")
-
+    # After processing games, save the updated processed_games
+    config.save_data(dimension_curated, processed_games)
     print(f"Completed processing {len(newly_processed)} new games for curation.")
 
 
