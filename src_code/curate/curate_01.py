@@ -25,7 +25,8 @@ def curate_data(config):
     dimension_game_rosters = "all_game_rosters"
     dimension_games = "all_boxscores"
     dimension_players = "all_players"
-    dimension_curated = "all_curated"  # New dimension for curated games
+    dimension_curated = "all_curated"  # IDs of curated games
+    dimension_curated_data = "all_curated_data"  # Combined data for all curated games
 
     # Check if we need to do a full reload or incremental update
     do_full_reload = getattr(config, "reload_curate", False)
@@ -38,9 +39,18 @@ def curate_data(config):
         else:
             processed_games = set(processed_games)  # Convert to set for efficient lookups
             print(f"Using cached curation data ({len(processed_games)} games)...")
+
+        # Load existing curated data if available
+        all_curated_data = config.load_data(dimension_curated_data)
+        if all_curated_data is None:
+            all_curated_data = {}
+            print("No existing curated data found. Creating new dataset.")
+        else:
+            print(f"Loaded existing curated data for {len(all_curated_data)} games.")
     else:
         print("Reload requested. Reprocessing all games.")
         processed_games = set()
+        all_curated_data = {}
 
     # Load data
     data_names = config.load_data(dimension_names)
@@ -82,6 +92,9 @@ def curate_data(config):
 
     if not games_to_process:
         print("No new games to process for curation.")
+        # Save the existing data even if no new games were processed
+        config.save_data(dimension_curated, sorted(list(processed_games)))
+        config.save_data(dimension_curated_data, all_curated_data)
         return
 
     print(f"Found {len(games_to_process)} games that need curation...")
@@ -112,7 +125,7 @@ def curate_data(config):
     for game_id in sorted(games_to_process):
         if (game_id in play_map and game_id in game_map and
                 game_id in shift_map and game_id in roster_map):
-            # We'll directly pass the actual data rather than indices
+            # Pass the actual data rather than indices
             play_data = data_plays[play_map[game_id]]
             game_data = data_games[game_map[game_id]]
             shift_data = data_shifts[shift_map[game_id]]
@@ -125,7 +138,8 @@ def curate_data(config):
                 game_data,
                 shift_data,
                 roster_data,
-                None  # Will be replaced with the queue in the multiprocessing section
+                None,  # Will be replaced with the queue
+                None  # Will be replaced with the shared data dictionary
             ))
         else:
             print(f"Warning: Missing data for game {game_id}, skipping.")
@@ -139,11 +153,16 @@ def curate_data(config):
 
     # Create manager for shared resources
     with mp.Manager() as manager:
-        # Create managed queue
+        # Create managed queue and shared dictionary
         result_queue = manager.Queue()
+        curated_data_dict = manager.dict()  # Shared dictionary for all game data
 
-        # Update process args with the queue
-        process_args = [(args[0], args[1], args[2], args[3], args[4], args[5], result_queue)
+        # Pre-populate shared dictionary with existing data
+        for game_id, game_data in all_curated_data.items():
+            curated_data_dict[game_id] = game_data
+
+        # Update process args with the queue and shared dictionary
+        process_args = [(args[0], args[1], args[2], args[3], args[4], args[5], result_queue, curated_data_dict)
                         for args in process_args]
 
         # Start reporter process
@@ -164,6 +183,9 @@ def curate_data(config):
             # Wait for reporter to finish
             reporter_process.join()
 
+        # Convert manager.dict to regular dict for saving
+        all_curated_data = dict(curated_data_dict)
+
     # Update processed games list with newly processed games
     newly_processed = set()
     for args in process_args:
@@ -171,9 +193,12 @@ def curate_data(config):
         newly_processed.add(game_id)
 
     processed_games.update(newly_processed)
-    # After processing games, save the updated processed_games as a list
+    # Save both the list of processed game IDs and the combined game data
     config.save_data(dimension_curated, sorted(list(processed_games)))
+    config.save_data(dimension_curated_data, all_curated_data)
+
     print(f"Completed processing {len(newly_processed)} new games for curation.")
+    print(f"Total curated games data: {len(all_curated_data)}")
 
 
 def process_single_game(game_id: int,
@@ -182,7 +207,8 @@ def process_single_game(game_id: int,
                         game_data: Dict,
                         shift_data: List[Dict],
                         roster_data: List[Dict],
-                        queue: Queue) -> None:
+                        queue: Queue,
+                        curated_data_dict: dict) -> None:
     """Process a single game and put validation results in the queue."""
     try:
         i_shift = 0
@@ -249,43 +275,43 @@ def process_single_game(game_id: int,
                     toi, player_stats = process_faceoff(event, period_cd, compare_shift, away_players, home_players)
                 elif event_details['event_name'] == 'hit':
                     toi, player_stats = process_hit(event, period_cd, compare_shift, away_players, home_players,
-                                                   last_event, game_time_event)
+                                                    last_event, game_time_event)
                 elif event_details['event_name'] == 'giveaway':
                     toi, player_stats = process_giveaway(event, period_cd, compare_shift, away_players, home_players,
-                                                        last_event, game_time_event)
+                                                         last_event, game_time_event)
                 elif event_details['event_name'] == 'takeaway':
                     toi, player_stats = process_takeaway(event, period_cd, compare_shift, away_players, home_players,
-                                                        last_event, game_time_event)
+                                                         last_event, game_time_event)
                 elif event_details['event_name'] == 'goal':
                     toi, player_stats = process_goal(event, period_cd, compare_shift, away_players, home_players,
-                                                    away_players_sorted, home_players_sorted, last_event,
-                                                    game_time_event)
+                                                     away_players_sorted, home_players_sorted, last_event,
+                                                     game_time_event)
                 elif event_details['event_name'] == 'shot-on-goal':
                     toi, player_stats = process_shot_on_goal(config.verbose, event, period_cd, compare_shift,
-                                                            away_players, home_players, last_event, game_time_event)
+                                                             away_players, home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'missed-shot':
                     toi, player_stats = process_missed_shot(event, period_cd, compare_shift, away_players, home_players,
-                                                           last_event, game_time_event)
+                                                            last_event, game_time_event)
                 elif event_details['event_name'] == 'blocked-shot':
                     toi, player_stats = process_blocked_shot(event, period_cd, compare_shift, away_players,
-                                                            home_players, away_players_sorted, home_players_sorted,
-                                                            last_event, game_time_event)
+                                                             home_players, away_players_sorted, home_players_sorted,
+                                                             last_event, game_time_event)
                 elif event_details['event_name'] == 'penalty':
                     toi, player_stats = process_penalty(config.verbose, event, period_cd, compare_shift,
-                                                       away_players_sorted, home_players_sorted, last_event,
-                                                       game_time_event)
+                                                        away_players_sorted, home_players_sorted, last_event,
+                                                        game_time_event)
                 elif event_details['event_name'] == 'stoppage':
                     toi, player_stats = process_stoppage(event, period_cd, compare_shift, away_players, home_players,
-                                                        last_event, game_time_event)
+                                                         last_event, game_time_event)
                 elif event_details['event_name'] == 'period-end':
                     toi, player_stats = process_period_end(event, period_cd, compare_shift, away_players, home_players,
-                                                          last_event, game_time_event)
+                                                           last_event, game_time_event)
                 elif event_details['event_name'] == 'delayed-penalty':
                     toi, player_stats = process_delayed_penalty(event, period_cd, compare_shift, away_players,
-                                                               home_players, last_event, game_time_event)
+                                                                home_players, last_event, game_time_event)
                 elif event_details['event_name'] == 'penalty-shot-missed':
                     toi, player_stats = process_penalty_shot(event, period_cd, compare_shift, away_players_sorted,
-                                                            home_players_sorted, last_event, game_time_event)
+                                                             home_players_sorted, last_event, game_time_event)
 
                 if sum(toi) >= 0 or period_cd == 2:
                     game_ids.append(game[i_event]['game_id'])
@@ -326,57 +352,61 @@ def process_single_game(game_id: int,
             'player_data': player_data,
         }
 
-        # Save game data
-        save_game_data(data, config.file_paths["game_output_pkl"] + f'{str(game_id)}')
+        # Add the game data to the shared dictionary instead of saving to a file
+        curated_data_dict[game_id] = data
 
-        # Create DataFrame
-        df_data = data.copy()
-        del df_data['player_data']
-        df = pd.DataFrame(df_data)
+        # Create DataFrame for CSV export if needed
+        if config.produce_csv:
+            df_data = data.copy()
+            del df_data['player_data']
+            df = pd.DataFrame(df_data)
 
-        player_attributes = list(player_data[0][0].keys())
-        standardized_players = []
+            player_attributes = list(player_data[0][0].keys())
+            standardized_players = []
 
-        # Sort players by sweater number
-        for player_id in sorted(away_players.keys()):
-            standardized_players.append(away_players[player_id])
-        for player_id in sorted(home_players.keys()):
-            standardized_players.append(home_players[player_id])
+            # Sort players by sweater number
+            for player_id in sorted(away_players.keys()):
+                standardized_players.append(away_players[player_id])
+            for player_id in sorted(home_players.keys()):
+                standardized_players.append(home_players[player_id])
 
-        num_players = len(standardized_players)
+            num_players = len(standardized_players)
 
-        # Initialize new columns
-        new_columns = {'player_data': player_data}
-        new_columns.update({
-            f'player_{i}_{attr}': pd.NA
-            for i in range(1, num_players + 1)
-            for attr in player_attributes
-        })
+            # Initialize new columns
+            new_columns = {'player_data': player_data}
+            new_columns.update({
+                f'player_{i}_{attr}': pd.NA
+                for i in range(1, num_players + 1)
+                for attr in player_attributes
+            })
 
-        # Create DataFrame with new columns
-        new_columns_df = pd.DataFrame(new_columns, index=df.index)
+            # Create DataFrame with new columns
+            new_columns_df = pd.DataFrame(new_columns, index=df.index)
 
-        # Create player ID to position mapping
-        player_id_to_position = {
-            player['player_id']: idx
-            for idx, player in enumerate(standardized_players, start=1)
-        }
+            # Create player ID to position mapping
+            player_id_to_position = {
+                player['player_id']: idx
+                for idx, player in enumerate(standardized_players, start=1)
+            }
 
-        # Populate player columns
-        def populate_player_columns(row):
-            player_data_row = row['player_data']
-            for player_in_row in player_data_row:
-                player_id = player_in_row['player_id']
-                if player_id in player_id_to_position:
-                    pos = player_id_to_position[player_id]
-                    for attr in player_attributes:
-                        col_name = f'player_{pos}_{attr}'
-                        row[col_name] = player_in_row.get(attr, pd.NA)
-            return row
+            # Populate player columns
+            def populate_player_columns(row):
+                player_data_row = row['player_data']
+                for player_in_row in player_data_row:
+                    player_id = player_in_row['player_id']
+                    if player_id in player_id_to_position:
+                        pos = player_id_to_position[player_id]
+                        for attr in player_attributes:
+                            col_name = f'player_{pos}_{attr}'
+                            row[col_name] = player_in_row.get(attr, pd.NA)
+                return row
 
-        new_columns_df = new_columns_df.apply(populate_player_columns, axis=1)
-        new_columns_df = new_columns_df.drop(columns=['player_data'])
-        df = pd.concat([df, new_columns_df], axis=1)
+            new_columns_df = new_columns_df.apply(populate_player_columns, axis=1)
+            new_columns_df = new_columns_df.drop(columns=['player_data'])
+            df = pd.concat([df, new_columns_df], axis=1)
+
+            # Save to CSV
+            df.to_csv(config.file_paths['game_output_csv'] + f'{str(game_id)}.csv', na_rep='', index=False)
 
         # Calculate team sums
         attributes_to_sum = [
@@ -394,20 +424,27 @@ def process_single_game(game_id: int,
 
         team_sums = {'away': {}, 'home': {}}
 
+        # Calculate team sums from player data directly
         for attr in attributes_to_sum:
-            # Calculate away team sums
-            cols_of_interest = df[away_columns[attr]]
-            vector_sums = cols_of_interest.apply(
-                lambda col: np.array(col.dropna().tolist()).sum(axis=0)
-            )
-            team_sums['away'][f'away_{attr}_sum'] = vector_sums.to_numpy().sum(axis=1).tolist()
+            # Calculate sums directly from player_data
+            away_sum = [0, 0, 0]
+            home_sum = [0, 0, 0]
 
-            # Calculate home team sums
-            cols_of_interest = df[home_columns[attr]]
-            vector_sums = cols_of_interest.apply(
-                lambda col: np.array(col.dropna().tolist()).sum(axis=0)
-            )
-            team_sums['home'][f'home_{attr}_sum'] = vector_sums.to_numpy().sum(axis=1).tolist()
+            # For each event/shift
+            for players_in_event in player_data:
+                # Process each player
+                for player_stat in players_in_event:
+                    # Check if this is a home or away player
+                    team = player_stat.get('player_team', '')
+                    if team == away_team and attr in player_stat:
+                        for i in range(3):  # For each period type
+                            away_sum[i] += player_stat[attr][i]
+                    elif team == home_team and attr in player_stat:
+                        for i in range(3):  # For each period type
+                            home_sum[i] += player_stat[attr][i]
+
+            team_sums['away'][f'away_{attr}_sum'] = away_sum
+            team_sums['home'][f'home_{attr}_sum'] = home_sum
 
         # Handle shootout goals
         if (team_sums['home']['home_goal_sum'][2] > 0) or (team_sums['away']['away_goal_sum'][2] > 0):
@@ -420,32 +457,32 @@ def process_single_game(game_id: int,
 
         # Create validation result
         validation_result = create_validation_result(
-            game_id=game_id,  # Use the passed game_id directly
+            game_id=game_id,
             team_sums=team_sums,
-            game_data=game_data,  # Use the directly passed game_data
-            toi_sum=sum(df["time_on_ice"].sum())
+            game_data=game_data,
+            toi_sum=sum(sum(toi_list, [])) if toi_list else 0
         )
-
-        # Save to CSV
-        if config.produce_csv:
-            df.to_csv(config.file_paths['game_output_csv'] + f'{str(game_id)}.csv', na_rep='', index=False)
 
         # Put validation result in queue
         queue.put(validation_result)
 
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error processing game {game_id}: {str(e)}\n{error_trace}")
+
         # Handle any errors during processing
         error_result = {
-            'game_id': game_id,  # Use the passed game_id directly
+            'game_id': game_id,
             'all_good': False,
             'reasons': [{
                 'type': 'processing_error',
                 'expected': 'successful processing',
-                'actual': str(e),
+                'actual': f"{str(e)}\n{error_trace}",
                 'difference': 'error occurred'
             }],
             'team_sums': None,
-            'game_data': game_data,  # Use the directly passed game_data
+            'game_data': game_data,
             'toi_sum': None
         }
         queue.put(error_result)

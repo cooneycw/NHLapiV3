@@ -56,6 +56,7 @@ class Config:
             "all_plays": os.path.join(self.current_path, "storage", "pickles", "all_plays.pkl"),
             "all_game_rosters": os.path.join(self.current_path, "storage", "pickles", "all_game_rosters.pkl"),
             "all_curated": os.path.join(self.current_path, "storage", "pickles", "all_curated.pkl"),
+            "all_curated_data": os.path.join(self.current_path, "storage", "pickles", "all_curated_data.pkl"),
             "game_output_csv": os.path.join(self.current_path, "storage", "output", "csv", "game_output"),
             "game_output_pkl": os.path.join(self.current_path, "storage", "output", "pkl", "game_output"),
             "game_output_jpg": os.path.join(self.current_path, "storage", "output", "jpg"),
@@ -164,6 +165,11 @@ class Config:
             elif dimension == "all_curated":
                 # For the curated games set, convert to a sorted list
                 sorted_data = sorted(list(data))
+                print(f"Saving {len(sorted_data)} curated game IDs to {self.file_paths[dimension]}")
+            elif dimension == "all_curated_data":
+                # For the consolidated game data dictionary
+                sorted_data = data
+                print(f"Saving consolidated data for {len(sorted_data)} games to {self.file_paths[dimension]}")
             else:
                 # For other data types that don't need sorting
                 sorted_data = data
@@ -171,7 +177,9 @@ class Config:
             with open(self.file_paths[dimension], 'wb') as file:
                 pickle.dump(sorted_data, file)
 
-            print(f"Saved sorted data to {self.file_paths[dimension]}")
+            # Only print this generic message for dimensions not handled with specific messages above
+            if dimension not in ["all_curated", "all_curated_data"]:
+                print(f"Saved sorted data to {self.file_paths[dimension]}")
         except Exception as e:
             print(f"Error saving data to {self.file_paths[dimension]}: {str(e)}")
 

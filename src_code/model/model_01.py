@@ -16,7 +16,7 @@ def model_data(config):
     Process curated game data and build a graph model for analysis.
 
     This function:
-    1. Loads all required datasets including the curated games list
+    1. Loads all required datasets including the curated games list and consolidated game data
     2. Filters games to only include those that have been curated
     3. Processes the filtered games in chronological order
     4. Builds a graph model with nodes for teams, players, games and performances
@@ -26,7 +26,7 @@ def model_data(config):
         config: A Config object containing settings and paths
 
     Returns:
-        None - The processed graph is saved to disk
+        NetworkX graph object - The processed graph
     """
     print("Starting model data processing...")
 
@@ -38,7 +38,8 @@ def model_data(config):
     dimension_game_rosters = "all_game_rosters"
     dimension_games = "all_boxscores"
     dimension_players = "all_players"
-    dimension_curated = "all_curated"  # Curated games dimension
+    dimension_curated = "all_curated"  # IDs of curated games
+    dimension_curated_data = "all_curated_data"  # Combined data for all curated games
 
     # Load all required datasets
     print("Loading datasets...")
@@ -50,6 +51,7 @@ def model_data(config):
     data_plays = config.load_data(dimension_plays)
     data_game_roster = config.load_data(dimension_game_rosters)
     data_curated = config.load_data(dimension_curated)  # Load the curated games list
+    all_curated_data = config.load_data(dimension_curated_data)  # Load the combined game data
 
     # Check if curated data exists and convert to set for efficient lookups
     processed_game_ids = set()
@@ -58,6 +60,13 @@ def model_data(config):
         print(f"Loaded {len(processed_game_ids)} curated game IDs.")
     else:
         print("Warning: No curated games data found. Processing will continue with no games.")
+
+    # Check if we have the combined curated game data
+    if not all_curated_data:
+        print("Warning: No curated game data found. Graph will be incomplete.")
+        all_curated_data = {}
+    else:
+        print(f"Loaded curated data for {len(all_curated_data)} games.")
 
     # Filter games to only include those that have been curated
     filtered_games = []
@@ -143,21 +152,31 @@ def model_data(config):
             verbose = True
 
         try:
-            # Load the shift data from the curated game file
-            shift_data = load_game_data(config.file_paths["game_output_pkl"] + f'{str(game["id"])}')
+            # Get game ID
+            game_id = game['id']
+
+            # Get the shift data from the consolidated data dictionary
+            if game_id not in all_curated_data:
+                print(f"Warning: No curated data found for game {game_id}")
+                error_count += 1
+                continue
+
+            shift_data = all_curated_data[game_id]
 
             # Get the correct team_game_map index for this game
-            if game['id'] in game_id_to_map_index:
-                map_index = game_id_to_map_index[game['id']]
+            if game_id in game_id_to_map_index:
+                map_index = game_id_to_map_index[game_id]
                 process_shift_data(data_graph, verbose, team_game_maps[map_index], shift_data)
                 shifts.append(shift_data)
-                update_game_outcome(data_graph, game['id'], game)
+                update_game_outcome(data_graph, game_id, game)
                 processed_count += 1
             else:
-                print(f"Warning: Could not find matching team_game_map for game {game['id']}")
+                print(f"Warning: Could not find matching team_game_map for game {game_id}")
                 error_count += 1
         except Exception as e:
-            print(f"Error processing game {game['id']}: {str(e)}")
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"Error processing game {game['id']}: {str(e)}\n{error_trace}")
             error_count += 1
 
     print(f"Processed shift data for {processed_count} games successfully. {error_count} games had errors.")
