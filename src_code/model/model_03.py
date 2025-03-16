@@ -34,7 +34,7 @@ def run_gnn_enhanced(config, config_model):
     print(f"Graph loaded with {len(data_graph.nodes)} nodes and {len(data_graph.edges)} edges")
 
     # Create output directory for visualizations
-    output_dir = os.path.join(os.getcwd(), "gnn_analysis")
+    output_dir = config.file_paths["gnn_analysis"]
     os.makedirs(output_dir, exist_ok=True)
     print(f"Analysis outputs will be saved to {output_dir}")
 

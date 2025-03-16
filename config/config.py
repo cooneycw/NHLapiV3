@@ -60,6 +60,7 @@ class Config:
             "game_output_csv": os.path.join(self.current_path, "storage", "output", "csv", "game_output"),
             "game_output_pkl": os.path.join(self.current_path, "storage", "output", "pkl", "game_output"),
             "game_output_jpg": os.path.join(self.current_path, "storage", "output", "jpg"),
+            "gnn_analysis": os.path.join(self.current_path, "storage", "analysis", "gnn_analysis"),
             "summary_excel": os.path.join(self.current_path, "storage", "output", "excel", "summary_excel"),
             "graph": os.path.join(self.current_path, "storage", "output", "graph", "graph"),
         }

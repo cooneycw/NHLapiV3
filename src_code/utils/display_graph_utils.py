@@ -8,6 +8,7 @@ def visualize_game_graph(data_graph, game_id, window_size=10, output_path=None, 
     """
     Create a detailed visualization of a specific game's subgraph showing TGP and PGP nodes,
     with historical aggregated data and sampled player interactions.
+    Now uses player names directly from PGP nodes.
 
     Args:
         data_graph: NetworkX graph containing all game data
@@ -133,13 +134,29 @@ def visualize_game_graph(data_graph, game_id, window_size=10, output_path=None, 
                                      edge_labels=edge_labels,
                                      font_size=8)
 
-    # Add node labels with enhanced statistics
+    # Add node labels with enhanced statistics and player names
     labels = {}
     for node in game_subgraph.nodes():
         node_data = game_subgraph.nodes[node]
+
+        # Start with node name
         label = f"{node}\n"
 
         if node_data.get('type') == 'player_game_performance':
+            # Use the player name directly from the PGP node
+            player_name = node_data.get('player_name', '')
+
+            # If no combined name, try to construct from first/last name
+            if not player_name:
+                first_name = node_data.get('player_first_name', '')
+                last_name = node_data.get('player_last_name', '')
+                if first_name or last_name:
+                    player_name = f"{first_name} {last_name}".strip()
+
+            # Add player name at the top of the label if available
+            if player_name:
+                label = f"{player_name}\n{node}\n"
+
             # Current game stats
             current_stats = ['player_position',
                              'toi', 'goal', 'assist', 'faceoff_taken', 'faceoff_won',

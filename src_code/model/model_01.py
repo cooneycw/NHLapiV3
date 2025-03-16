@@ -8,6 +8,7 @@ from src_code.utils.graph_utils import (
 from src_code.utils.display_graph_utils import visualize_game_graph
 from src_code.utils.save_graph_utils import save_graph, load_graph
 import copy
+import matplotlib.pyplot as plt
 from datetime import datetime
 
 
@@ -221,6 +222,11 @@ def model_visualization(config):
                     edge_sample_rate=0.05,
 
                 )
+                plt.close('all')
+
+                # Force garbage collection
+                import gc
+                gc.collect()
 
 
 def process_shift_data(data_graph, verbose, team_game_map, shift_data):

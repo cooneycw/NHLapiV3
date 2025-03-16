@@ -270,6 +270,17 @@ def update_days_since_last_game(graph, game_id):
 
 
 def add_player_game_performance(graph, roster):
+    """
+    Add Player Game Performance (PGP) nodes to the graph for each player in the roster.
+    Now includes player names in the PGP node attributes for easier debugging and visualization.
+
+    Args:
+        graph: NetworkX graph to update
+        roster: List of player roster dictionaries
+
+    Returns:
+        Dictionary mapping team keys to lists of PGP nodes
+    """
     default_stats = {
         'games': [0, 0, 0],
         'toi': [0, 0, 0],
@@ -308,17 +319,70 @@ def add_player_game_performance(graph, roster):
         player_position = player['player_position']
         player_pgp = str(game_id) + '_' + str(player_id)
         team_tgp = str(game_id) + '_' + player_team
+
+        # Create copies of default stats for node and edge
         stat_node_copy = copy.deepcopy(default_stats)
         edge_node_copy = copy.deepcopy(default_stats)
-        graph.add_node(player_pgp, type='player_game_performance', player_position=player_position,
+
+        # Get player name information from player node if available
+        player_name = ""
+        player_first_name = ""
+        player_last_name = ""
+
+        if player_id in graph.nodes:
+            player_node = graph.nodes[player_id]
+
+            # Try to get first and last name (handling different possible field names)
+            if 'first_name' in player_node and 'last_name' in player_node:
+                player_first_name = player_node['first_name']
+                player_last_name = player_node['last_name']
+            elif 'firstName' in player_node and 'lastName' in player_node:
+                player_first_name = player_node['firstName']
+                player_last_name = player_node['lastName']
+            elif 'first' in player_node and 'last' in player_node:
+                player_first_name = player_node['first']
+                player_last_name = player_node['last']
+
+            # If we found a first and last name, combine them
+            if player_first_name and player_last_name:
+                player_name = f"{player_first_name} {player_last_name}"
+
+            # If we couldn't find separate first/last names, look for a full name field
+            if not player_name:
+                if 'name' in player_node:
+                    player_name = player_node['name']
+                elif 'full_name' in player_node:
+                    player_name = player_node['full_name']
+                elif 'fullName' in player_node:
+                    player_name = player_node['fullName']
+                elif 'player_name' in player_node:
+                    player_name = player_node['player_name']
+
+            # If we still don't have a name, check any attribute with "name" in it
+            if not player_name:
+                for key, value in player_node.items():
+                    if 'name' in key.lower() and isinstance(value, str) and value:
+                        player_name = value
+                        break
+
+        # Add PGP node with player name information
+        graph.add_node(player_pgp,
+                       type='player_game_performance',
+                       player_position=player_position,
                        player_team=player_team,
                        game_date=game_date,
+                       player_name=player_name,
+                       player_first_name=player_first_name,
+                       player_last_name=player_last_name,
                        **stat_node_copy)
+
+        # Add edges
         graph.add_edge(player_pgp, team_tgp, type='pgp_tgp_edge')
         graph.add_edge(player_pgp, player_id, type='pgp_player_edge',
                        player_team=player_team,
                        game_date=game_date, **edge_node_copy)
 
+        # Build the team_game_map
         team_key = (game_id, player_team)
         if team_key not in team_game_map:
             team_game_map[team_key] = []
