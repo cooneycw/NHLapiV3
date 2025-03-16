@@ -16,7 +16,7 @@ import pandas as pd
 
 
 def curate_data(config):
-    """Main function for parallel game data curation with incremental updates."""
+    """Main function for parallel game data curation with incremental updates by season."""
 
     print("Gathering game data for curation...")
     # Load data
@@ -29,29 +29,8 @@ def curate_data(config):
     dimension_curated = "all_curated"  # IDs of curated games
     dimension_curated_data = "all_curated_data"  # Combined data for all curated games
 
-    # Check if we need to do a full reload or incremental update
+    # Check if we need to do a full reload
     do_full_reload = getattr(config, "reload_curate", False)
-
-    if not do_full_reload:
-        processed_games = config.load_data(dimension_curated)
-        if processed_games is None:
-            processed_games = set()
-            print("No valid cached curation data. Processing all games.")
-        else:
-            processed_games = set(processed_games)  # Convert to set for efficient lookups
-            print(f"Using cached curation data ({len(processed_games)} games)...")
-
-        # Load existing curated data if available
-        all_curated_data = config.load_data(dimension_curated_data)
-        if all_curated_data is None:
-            all_curated_data = {}
-            print("No existing curated data found. Creating new dataset.")
-        else:
-            print(f"Loaded existing curated data for {len(all_curated_data)} games.")
-    else:
-        print("Reload requested. Reprocessing all games.")
-        processed_games = set()
-        all_curated_data = {}
 
     # Load data
     data_names = config.load_data(dimension_names)
@@ -61,7 +40,7 @@ def curate_data(config):
     data_plays = config.load_data(dimension_plays)
     data_game_roster = config.load_data(dimension_game_rosters)
 
-    # Identify games in each dataset and determine which ones to process
+    # Identify games in each dataset
     play_game_ids = set()
     for plays in data_plays:
         if plays and len(plays) > 0 and 'game_id' in plays[0]:
@@ -85,21 +64,6 @@ def curate_data(config):
     # Find games that have data in all datasets
     available_games = play_game_ids.intersection(boxscore_game_ids, shift_game_ids, roster_game_ids)
 
-    # Filter out games already processed unless doing a full reload
-    if do_full_reload:
-        games_to_process = available_games
-    else:
-        games_to_process = available_games - processed_games
-
-    if not games_to_process:
-        print("No new games to process for curation.")
-        # Save the existing data even if no new games were processed
-        config.save_data(dimension_curated, sorted(list(processed_games)))
-        config.save_data(dimension_curated_data, all_curated_data)
-        return
-
-    print(f"Found {len(games_to_process)} games that need curation...")
-
     # Create mappings from game_id to data index
     play_map = {}
     for i, plays in enumerate(data_plays):
@@ -121,102 +85,175 @@ def curate_data(config):
         if roster and len(roster) > 0 and 'game_id' in roster[0]:
             roster_map[roster[0]['game_id']] = i
 
-    # Create process arguments for each game to process
-    process_args = []
-    for game_id in sorted(games_to_process):
-        if (game_id in play_map and game_id in game_map and
-                game_id in shift_map and game_id in roster_map):
-            # Pass the actual data rather than indices
-            play_data = data_plays[play_map[game_id]]
-            game_data = data_games[game_map[game_id]]
-            shift_data = data_shifts[shift_map[game_id]]
-            roster_data = data_game_roster[roster_map[game_id]]
+    # Create mapping of game_id to season_id
+    game_to_season = {}
+    for game in data_games:
+        if 'id' in game:
+            game_id = game['id']
+            # Get the game object to access season_id
+            game_obj = config.Game.get_game(game_id)
+            if game_obj and hasattr(game_obj, 'season_id'):
+                game_to_season[game_id] = game_obj.season_id
 
-            process_args.append((
-                game_id,  # Use game_id instead of index
-                play_data,
-                config,
-                game_data,
-                shift_data,
-                roster_data,
-                None,  # Will be replaced with the queue
-                None  # Will be replaced with the shared data dictionary
-            ))
+    # Get the list of selected seasons
+    selected_seasons = [season[0] for season in config.Season.get_selected_seasons(config.season_count)]
+    print(f"Processing {len(selected_seasons)} seasons: {', '.join(str(s) for s in selected_seasons)}")
+
+    # Process each season separately
+    for season in selected_seasons:
+        season_str = str(season)
+        print(f"\nProcessing season {season_str}...")
+
+        # Load season-specific curated data
+        if not do_full_reload:
+            # Try to load existing processed games for this season
+            season_curated_path = config.file_paths[dimension_curated].replace(".pkl", f"_{season_str}.pkl")
+            try:
+                if os.path.exists(season_curated_path):
+                    with open(season_curated_path, 'rb') as file:
+                        processed_games = pickle.load(file)
+                    processed_games = set(processed_games)  # Convert to set for efficient lookups
+                    print(f"Using cached curation data for season {season_str} ({len(processed_games)} games)...")
+                else:
+                    processed_games = set()
+                    print(f"No valid cached curation data for season {season_str}. Processing all games.")
+            except Exception as e:
+                processed_games = set()
+                print(f"Error loading cached curation data for season {season_str}: {str(e)}. Processing all games.")
+
+            # Load existing curated data for this season
+            season_data_path = config.file_paths[dimension_curated_data].replace(".pkl", f"_{season_str}.pkl")
+            try:
+                if os.path.exists(season_data_path):
+                    with open(season_data_path, 'rb') as file:
+                        all_curated_data = pickle.load(file)
+                    print(f"Loaded existing curated data for season {season_str} ({len(all_curated_data)} games).")
+                else:
+                    all_curated_data = {}
+                    print(f"No existing curated data found for season {season_str}. Creating new dataset.")
+            except Exception as e:
+                all_curated_data = {}
+                print(f"Error loading curated data for season {season_str}: {str(e)}. Creating new dataset.")
         else:
-            print(f"Warning: Missing data for game {game_id}, skipping.")
+            print(f"Reload requested for season {season_str}. Reprocessing all games.")
+            processed_games = set()
+            all_curated_data = {}
 
-    # Clean up large data structures no longer needed
-    del data_plays
-    del data_games
-    del data_shifts
-    del data_game_roster
-    del play_map
-    del game_map
-    del shift_map
-    del roster_map
-    gc.collect()  # Force garbage collection
+        # Filter available games to only include this season
+        season_games = {game_id for game_id in available_games
+                        if game_id in game_to_season and game_to_season[game_id] == season}
 
-    # Verify we have games to process
-    if not process_args:
-        print("No games with complete data to process.")
-        return
+        if not season_games:
+            print(f"No games found for season {season_str} in available datasets.")
+            continue
 
-    print(f"Processing {len(process_args)} games...")
+        # Filter out games already processed unless doing a full reload
+        if do_full_reload:
+            games_to_process = season_games
+        else:
+            games_to_process = season_games - processed_games
 
-    # Create manager for shared resources
-    with mp.Manager() as manager:
-        # Create managed queue and shared dictionary
-        result_queue = manager.Queue()
-        curated_data_dict = manager.dict()  # Shared dictionary for all game data
+        if not games_to_process:
+            print(f"No new games to process for curation in season {season_str}.")
+            # Save the existing data even if no new games were processed
+            config.save_curated_data_seasons(dimension_curated, sorted(list(processed_games)), season)
+            config.save_curated_data_seasons(dimension_curated_data, all_curated_data, season)
+            continue
 
-        # Pre-populate shared dictionary with existing data
-        for game_id, game_data in all_curated_data.items():
-            curated_data_dict[game_id] = game_data
+        print(f"Found {len(games_to_process)} games for season {season_str} that need curation...")
 
-        # Update process args with the queue and shared dictionary
-        process_args = [(args[0], args[1], args[2], args[3], args[4], args[5], result_queue, curated_data_dict)
-                        for args in process_args]
+        # Create process arguments for each game to process in this season
+        process_args = []
+        for game_id in sorted(games_to_process):
+            if (game_id in play_map and game_id in game_map and
+                    game_id in shift_map and game_id in roster_map):
+                # Pass the actual data rather than indices
+                play_data = data_plays[play_map[game_id]]
+                game_data = data_games[game_map[game_id]]
+                shift_data = data_shifts[shift_map[game_id]]
+                roster_data = data_game_roster[roster_map[game_id]]
 
-        # Start reporter process
-        reporter_process = mp.Process(
-            target=validation_reporter,
-            args=(result_queue, len(process_args))
-        )
-        reporter_process.start()
+                process_args.append((
+                    game_id,  # Use game_id instead of index
+                    play_data,
+                    config,
+                    game_data,
+                    shift_data,
+                    roster_data,
+                    None,  # Will be replaced with the queue
+                    None  # Will be replaced with the shared data dictionary
+                ))
+            else:
+                print(f"Warning: Missing data for game {game_id}, skipping.")
 
-        # Create pool of workers
-        with mp.Pool(processes=max(1, int(0.15 * config.max_workers))) as pool:
-            # Process games in parallel
-            pool.starmap(process_single_game, process_args)
+        # Clean up large data structures no longer needed for this batch
+        gc.collect()  # Force garbage collection
 
-            # Signal reporter that all games are processed
-            result_queue.put(None)  # Sentinel value
+        # Verify we have games to process
+        if not process_args:
+            print(f"No games with complete data to process for season {season_str}.")
+            continue
 
-            # Wait for reporter to finish
-            reporter_process.join()
+        print(f"Processing {len(process_args)} games for season {season_str}...")
 
-        # Convert manager.dict to regular dict for saving
-        all_curated_data = dict(curated_data_dict)
+        # Create manager for shared resources
+        with mp.Manager() as manager:
+            # Create managed queue and shared dictionary
+            result_queue = manager.Queue()
+            curated_data_dict = manager.dict()  # Shared dictionary for all game data
 
-    # Update processed games list with newly processed games
-    newly_processed = set()
-    for args in process_args:
-        game_id = args[0]  # Now this is the actual game_id
-        newly_processed.add(game_id)
+            # Pre-populate shared dictionary with existing data
+            for game_id, game_data in all_curated_data.items():
+                curated_data_dict[game_id] = game_data
 
-    processed_games.update(newly_processed)
-    # Save both the list of processed game IDs and the combined game data
-    config.save_data(dimension_curated, sorted(list(processed_games)))
-    config.save_data(dimension_curated_data, all_curated_data)
+            # Update process args with the queue and shared dictionary
+            process_args = [(args[0], args[1], args[2], args[3], args[4], args[5], result_queue, curated_data_dict)
+                            for args in process_args]
 
-    del process_args
-    del processed_games
+            # Start reporter process
+            reporter_process = mp.Process(
+                target=validation_reporter,
+                args=(result_queue, len(process_args))
+            )
+            reporter_process.start()
 
-    print(f"Completed processing {len(newly_processed)} new games for curation.")
-    print(f"Total curated games data: {len(all_curated_data)}")
-    del newly_processed
-    del all_curated_data
-    gc.collect()
+            # Create pool of workers
+            with mp.Pool(processes=max(1, int(0.5 * config.max_workers))) as pool:
+                # Process games in parallel
+                pool.starmap(process_single_game, process_args)
+
+                # Signal reporter that all games are processed
+                result_queue.put(None)  # Sentinel value
+
+                # Wait for reporter to finish
+                reporter_process.join()
+
+            # Convert manager.dict to regular dict for saving
+            all_curated_data = dict(curated_data_dict)
+
+        # Update processed games list with newly processed games
+        newly_processed = set()
+        for args in process_args:
+            game_id = args[0]  # Now this is the actual game_id
+            newly_processed.add(game_id)
+
+        processed_games.update(newly_processed)
+
+        # Save both the list of processed game IDs and the combined game data for this season
+        config.save_curated_data_seasons(dimension_curated, sorted(list(processed_games)), season)
+        config.save_curated_data_seasons(dimension_curated_data, all_curated_data, season)
+
+        print(f"Completed processing {len(newly_processed)} new games for curation in season {season_str}.")
+        print(f"Total curated games data for season {season_str}: {len(all_curated_data)}")
+
+        # Cleanup to free memory
+        del process_args
+        del processed_games
+        del newly_processed
+        del all_curated_data
+        gc.collect()
+
+    print(f"Completed curation for all {len(selected_seasons)} seasons.")
 
 
 def process_single_game(game_id: int,

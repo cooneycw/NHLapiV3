@@ -184,6 +184,69 @@ class Config:
         except Exception as e:
             print(f"Error saving data to {self.file_paths[dimension]}: {str(e)}")
 
+    def save_curated_data_seasons(self, dimension_base, data, season):
+        """Save curated data separately for each season.
+
+        Args:
+            dimension_base: The base dimension name (e.g., "all_curated" or "all_curated_data")
+            data: The data to save
+            season: The season identifier to append to the filename
+        """
+        season_str = str(season)
+        file_path = self.file_paths[dimension_base].replace(".pkl", f"_{season_str}.pkl")
+
+        try:
+            with open(file_path, 'wb') as file:
+                pickle.dump(data, file)
+            print(f"Saved {dimension_base} data for season {season_str} to {file_path}")
+        except Exception as e:
+            print(f"Error saving {dimension_base} data for season {season_str}: {str(e)}")
+
+    def load_curated_data(self):
+        """Load curated data from all season-specific files.
+
+        Returns:
+            A tuple of:
+            - set of all curated game IDs
+            - dictionary of all curated game data
+        """
+        # Get the list of selected seasons
+        selected_seasons = [season[0] for season in self.Season.get_selected_seasons(self.season_count)]
+
+        # Initialize result containers
+        all_game_ids = set()
+        all_game_data = {}
+
+        # Load data for each season
+        for season in selected_seasons:
+            season_str = str(season)
+
+            # Load game IDs
+            curated_path = self.file_paths["all_curated"].replace(".pkl", f"_{season_str}.pkl")
+            if os.path.exists(curated_path):
+                try:
+                    with open(curated_path, 'rb') as file:
+                        season_ids = pickle.load(file)
+                    if isinstance(season_ids, list):
+                        season_ids = set(season_ids)
+                    all_game_ids.update(season_ids)
+                    print(f"Loaded {len(season_ids)} curated game IDs from season {season_str}")
+                except Exception as e:
+                    print(f"Error loading curated IDs for season {season_str}: {str(e)}")
+
+            # Load game data
+            data_path = self.file_paths["all_curated_data"].replace(".pkl", f"_{season_str}.pkl")
+            if os.path.exists(data_path):
+                try:
+                    with open(data_path, 'rb') as file:
+                        season_data = pickle.load(file)
+                    all_game_data.update(season_data)
+                    print(f"Loaded {len(season_data)} curated game data entries from season {season_str}")
+                except Exception as e:
+                    print(f"Error loading curated data for season {season_str}: {str(e)}")
+
+        return all_game_ids, all_game_data
+
     @staticmethod
     def shift_registry():
         shift_categ = dict()

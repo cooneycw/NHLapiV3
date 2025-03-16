@@ -52,8 +52,8 @@ def model_data(config):
     data_shifts = config.load_data(dimension_shifts)
     data_plays = config.load_data(dimension_plays)
     data_game_roster = config.load_data(dimension_game_rosters)
-    data_curated = config.load_data(dimension_curated)  # Load the curated games list
-    all_curated_data = config.load_data(dimension_curated_data)  # Load the combined game data
+    data_curated = config.load_curated_data(dimension_curated)  # Load the curated games list
+    all_curated_data = config.load_curated_data(dimension_curated_data)  # Load the combined game data
 
     # Check if curated data exists and convert to set for efficient lookups
     processed_game_ids = set()
