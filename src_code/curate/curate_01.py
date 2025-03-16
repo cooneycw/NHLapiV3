@@ -375,7 +375,7 @@ def process_single_game(game_id: int,
 
         # Release memory for lists after they've been added to the dictionary
         del game_ids, game_date, away_teams, home_teams, period_id, period_code
-        del time_index, toi_list, event_id, shift_id, away_empty_net, home_empty_net
+        del time_index, event_id, shift_id, away_empty_net, home_empty_net
         del away_skaters, home_skaters
         gc.collect()
 
