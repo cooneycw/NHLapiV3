@@ -11,7 +11,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import auc, roc_curve, f1_score, roc_auc_score, confusion_matrix
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from src_code.utils.save_graph_utils import load_graph
+from src_code.utils.save_graph_utils import load_filtered_graph
 
 
 def run_gnn_enhanced(config, config_model):
@@ -28,9 +28,10 @@ def run_gnn_enhanced(config, config_model):
 
     print("====== Starting Enhanced GNN Training ======")
     print(f"Loading graph from {config.file_paths['graph']}")
+    training_cutoff_date = config.split_data if hasattr(config, 'split_data') else None
+    # Load the graph with date filtering
+    data_graph = load_filtered_graph(config.file_paths["graph"], training_cutoff_date)
 
-    # Load the graph
-    data_graph = load_graph(config.file_paths["graph"])
     print(f"Graph loaded with {len(data_graph.nodes)} nodes and {len(data_graph.edges)} edges")
 
     # Create output directory for visualizations

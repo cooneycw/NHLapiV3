@@ -8,6 +8,7 @@ from src_code.utils.graph_utils import (
 from src_code.utils.display_graph_utils import visualize_game_graph
 from src_code.utils.save_graph_utils import save_graph, load_graph
 import copy
+import gc
 import matplotlib.pyplot as plt
 from datetime import datetime
 
@@ -200,11 +201,71 @@ def model_data(config):
 
 
 def model_visualization(config):
-    data_graph = load_graph(config.file_paths["graph"])
+    """
+    Generate visualizations for games in the graph, with optional date filtering.
+
+    Args:
+        config: A Config object containing settings and paths
+    """
+    from src_code.utils.save_graph_utils import load_graph, load_filtered_graph
+
+    # Check if we should apply date filtering
+    training_cutoff_date = config.split_data if hasattr(config, 'split_data') else None
+
+    # Load graph with optional date filtering
+    if training_cutoff_date:
+        print(f"Loading graph with date filtering (games on or after {training_cutoff_date})...")
+        data_graph = load_filtered_graph(config.file_paths["graph"], training_cutoff_date)
+    else:
+        print("Loading complete graph (no date filtering)...")
+        data_graph = load_graph(config.file_paths["graph"])
+
     dimension_games = "all_boxscores"
     data_games = config.load_data(dimension_games)
-    print("Generating visualizations...")
+
+    # If we have date filtering, filter the games list too
+    if training_cutoff_date:
+        filtered_games = []
+        excluded_count = 0
+
+        for game in data_games:
+            game_date = game.get('game_date')
+            if game_date:
+                # Convert string dates to datetime.date objects if needed
+                if isinstance(game_date, str):
+                    try:
+                        from datetime import datetime
+                        game_date = datetime.strptime(game_date, '%Y-%m-%d').date()
+                    except:
+                        # If date parsing fails, include the game
+                        filtered_games.append(game)
+                        continue
+
+                if isinstance(game_date, datetime):
+                    game_date = game_date.date()
+
+                # Include game if it's on or after the cutoff date
+                if game_date >= training_cutoff_date:
+                    filtered_games.append(game)
+                else:
+                    excluded_count += 1
+            else:
+                # Include games with no date information
+                filtered_games.append(game)
+
+        print(f"Date filtering: Excluded {excluded_count} games before {training_cutoff_date}")
+        print(f"Generating visualizations for {len(filtered_games)} games...")
+        data_games = filtered_games
+    else:
+        print(f"Generating visualizations for all {len(data_games)} games...")
+
+    # Generate visualizations
     for m, game in enumerate(data_games):
+        # Check if game exists in the filtered graph
+        game_id = game.get('id')
+        if game_id not in data_graph.nodes:
+            continue
+
         # Create visualization for every 10th game or the last game
         if m % 10 == 0 or m == len(data_games) - 1:
             print(f'Generating visualization for game {game["id"]}')
@@ -220,14 +281,11 @@ def model_visualization(config):
                     window_size=window_size,
                     output_path=output_path,
                     edge_sample_rate=0.05,
-
                 )
                 plt.close('all')
 
                 # Force garbage collection
-                import gc
                 gc.collect()
-
 
 def process_shift_data(data_graph, verbose, team_game_map, shift_data):
     # called on a per-game basis

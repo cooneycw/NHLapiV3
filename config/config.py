@@ -22,9 +22,9 @@ class Config:
 
         self.verbose = input_dict['verbose']
         self.produce_csv = input_dict['produce_csv']
-        self.stat_window_sizes = [5, 7, 10, 20]
+        self.stat_window_sizes = [5, 10, 20, 40, 82]
         self.curr_date = datetime.now().date()
-        self.split_data = datetime(2024, 1, 1).date()
+        self.split_data = datetime(2023, 7, 1).date()
         # self.curr_date = datetime(2024, 12, 1).date()
         self.max_workers = 28
         self.base_url = "https://api-web.nhle.com"

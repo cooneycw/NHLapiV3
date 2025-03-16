@@ -12,26 +12,26 @@ def main():
     config_dict = {
         "verbose": False,
         "produce_csv": False,
-        "season_count": 1,
-        "delete_files": False,
-        "reload_seasons": False,
-        "reload_teams": False,
-        "reload_games": False,
+        "season_count": 3,
+        "delete_files": True,
+        "reload_seasons": True,
+        "reload_teams": True,
+        "reload_games": True,
         "update_game_statuses": True,
-        "reload_boxscores": False,
-        "reload_players": False,
-        "reload_playernames": False,
-        "reload_playbyplay": False,
-        "reload_rosters": False,
+        "reload_boxscores": True,
+        "reload_players": True,
+        "reload_playernames": True,
+        "reload_playbyplay": True,
+        "reload_rosters": True,
         "reload_curate": True,
     }
     config = Config(config_dict)
     config_model = ConfigModel()
-    # get_data(config)
-    # curate_data(config)
+    get_data(config)
+    curate_data(config)
     model_data(config)
-    # model_visualization(config)
-    # run_gnn_enhanced(config, config_model)
+    model_visualization(config)
+    run_gnn_enhanced(config, config_model)
 
 
 def get_data(config):
