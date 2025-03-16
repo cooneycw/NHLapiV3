@@ -1,3 +1,4 @@
+import gc
 import multiprocessing as mp
 from multiprocessing import Queue
 from src_code.utils.utils import (
@@ -144,6 +145,17 @@ def curate_data(config):
         else:
             print(f"Warning: Missing data for game {game_id}, skipping.")
 
+    # Clean up large data structures no longer needed
+    del data_plays
+    del data_games
+    del data_shifts
+    del data_game_roster
+    del play_map
+    del game_map
+    del shift_map
+    del roster_map
+    gc.collect()  # Force garbage collection
+
     # Verify we have games to process
     if not process_args:
         print("No games with complete data to process.")
@@ -173,7 +185,7 @@ def curate_data(config):
         reporter_process.start()
 
         # Create pool of workers
-        with mp.Pool(processes=max(1, int(0.35 * config.max_workers))) as pool:
+        with mp.Pool(processes=max(1, int(0.15 * config.max_workers))) as pool:
             # Process games in parallel
             pool.starmap(process_single_game, process_args)
 
@@ -197,8 +209,14 @@ def curate_data(config):
     config.save_data(dimension_curated, sorted(list(processed_games)))
     config.save_data(dimension_curated_data, all_curated_data)
 
+    del process_args
+    del processed_games
+
     print(f"Completed processing {len(newly_processed)} new games for curation.")
     print(f"Total curated games data: {len(all_curated_data)}")
+    del newly_processed
+    del all_curated_data
+    gc.collect()
 
 
 def process_single_game(game_id: int,
@@ -354,6 +372,12 @@ def process_single_game(game_id: int,
 
         # Add the game data to the shared dictionary instead of saving to a file
         curated_data_dict[game_id] = data
+
+        # Release memory for lists after they've been added to the dictionary
+        del game_ids, game_date, away_teams, home_teams, period_id, period_code
+        del time_index, toi_list, event_id, shift_id, away_empty_net, home_empty_net
+        del away_skaters, home_skaters
+        gc.collect()
 
         # Create DataFrame for CSV export if needed
         if config.produce_csv:

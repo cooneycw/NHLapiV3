@@ -131,10 +131,10 @@ class Config:
                 return pickle.load(file)
         except FileNotFoundError:
             print(f"Data not saved previously: {self.file_paths[dimension]}")
-            return None, None
+            return None
         except Exception as e:
             print(f"Error loading data from {self.file_paths[dimension]}: {str(e)}")
-            return None, None
+            return None
 
     def save_data(self, dimension, data):
         try:
