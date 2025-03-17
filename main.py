@@ -31,7 +31,7 @@ def main():
     curate_data(config)
     model_data(config)
     model_visualization(config)
-    run_gnn_enhanced(config, config_model)
+    # run_gnn_enhanced(config, config_model)
 
 
 def get_data(config):

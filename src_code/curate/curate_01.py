@@ -11,8 +11,9 @@ from src_code.utils.utils import (
 from typing import Dict, List, Any
 import copy
 import heapq
-import numpy as np
+import os
 import pandas as pd
+import pickle
 
 
 def curate_data(config):
@@ -28,6 +29,7 @@ def curate_data(config):
     dimension_players = "all_players"
     dimension_curated = "all_curated"  # IDs of curated games
     dimension_curated_data = "all_curated_data"  # Combined data for all curated games
+    dimension_seasons = "all_seasons"  # Load this to get seasons data directly
 
     # Check if we need to do a full reload
     do_full_reload = getattr(config, "reload_curate", False)
@@ -39,6 +41,83 @@ def curate_data(config):
     data_shifts = config.load_data(dimension_shifts)
     data_plays = config.load_data(dimension_plays)
     data_game_roster = config.load_data(dimension_game_rosters)
+    data_seasons = config.load_data(dimension_seasons)  # Load seasons data
+
+    # Log the seasons data we found
+    if data_seasons:
+        print(f"Loaded {len(data_seasons)} seasons from seasons dimension")
+    else:
+        print("Warning: No seasons data found. Will use Season class.")
+
+    # Get seasons to process - try multiple approaches in order of preference
+    selected_seasons = []
+
+    # 1. First try: Use the loaded seasons data if available
+    if data_seasons:
+        # Print the type of the first season to help debugging
+        if data_seasons:
+            print(f"Season data type: {type(data_seasons[0])}")
+
+        # Sort seasons (data_seasons is a list of integers like 20222023)
+        sorted_seasons = sorted(data_seasons, reverse=True)
+        # Take the most recent config.season_count seasons
+        full_season_ids = sorted_seasons[:config.season_count]
+
+        # Convert full season IDs (like 20222023) to the starting year (2022)
+        # This matches the format we'll extract from game IDs
+        selected_seasons = [int(str(s)[:4]) for s in full_season_ids]
+        print(f"Using {len(selected_seasons)} most recent seasons: {selected_seasons}")
+        print(f"  (from full season IDs: {full_season_ids})")
+
+    # 2. Second try: Use the Season class method if first approach fails
+    if not selected_seasons:
+        try:
+            season_objects = config.Season.get_selected_seasons(config.season_count)
+            if season_objects:
+                selected_seasons = [s[0] for s in season_objects]
+                print(f"Using {len(selected_seasons)} seasons from Season class: {selected_seasons}")
+        except Exception as e:
+            print(f"Error getting seasons from Season class: {e}")
+
+    # 3. Last resort: Extract seasons from game IDs if everything else fails
+    if not selected_seasons:
+        print("Extracting seasons from game IDs...")
+        game_seasons = set()
+        for game in data_games:
+            if 'id' in game:
+                try:
+                    # Extract season from game ID (first 4 digits, e.g., 2022020001 -> 2022)
+                    season_str = str(game['id'])[:4]
+                    if len(season_str) == 4 and season_str.isdigit():
+                        game_seasons.add(int(season_str))
+                except (ValueError, TypeError, IndexError):
+                    pass
+
+        if game_seasons:
+            # Take the most recent seasons
+            sorted_game_seasons = sorted(game_seasons, reverse=True)
+            selected_seasons = sorted_game_seasons[:config.season_count]
+            print(f"Extracted {len(selected_seasons)} seasons from game IDs: {selected_seasons}")
+
+    if not selected_seasons:
+        print("ERROR: Could not determine any seasons to process.")
+        return
+
+    print(f"Processing {len(selected_seasons)} seasons: {', '.join(str(s) for s in selected_seasons)}")
+
+    # Create mapping of game_id to season_id for filtering
+    game_to_season = {}
+    for game in data_games:
+        if 'id' in game:
+            game_id = game['id']
+            # Extract season from game ID (first 4 digits)
+            try:
+                season_str = str(game_id)[:4]
+                if len(season_str) == 4 and season_str.isdigit():
+                    season_id = int(season_str)
+                    game_to_season[game_id] = season_id
+            except (ValueError, TypeError, IndexError):
+                pass
 
     # Identify games in each dataset
     play_game_ids = set()
@@ -84,20 +163,6 @@ def curate_data(config):
     for i, roster in enumerate(data_game_roster):
         if roster and len(roster) > 0 and 'game_id' in roster[0]:
             roster_map[roster[0]['game_id']] = i
-
-    # Create mapping of game_id to season_id
-    game_to_season = {}
-    for game in data_games:
-        if 'id' in game:
-            game_id = game['id']
-            # Get the game object to access season_id
-            game_obj = config.Game.get_game(game_id)
-            if game_obj and hasattr(game_obj, 'season_id'):
-                game_to_season[game_id] = game_obj.season_id
-
-    # Get the list of selected seasons
-    selected_seasons = [season[0] for season in config.Season.get_selected_seasons(config.season_count)]
-    print(f"Processing {len(selected_seasons)} seasons: {', '.join(str(s) for s in selected_seasons)}")
 
     # Process each season separately
     for season in selected_seasons:
