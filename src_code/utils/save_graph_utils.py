@@ -1,3 +1,5 @@
+from datetime import datetime
+import copy
 import networkx as nx
 import pickle
 import json
@@ -83,8 +85,6 @@ def load_filtered_graph(graph_path, cutoff_date=None):
     Returns:
         filtered_graph: NetworkX graph with only games after the cutoff date
     """
-    from src_code.utils.save_graph_utils import load_graph
-    import copy
 
     print(f"Loading graph from {graph_path}")
     original_graph = load_graph(graph_path)

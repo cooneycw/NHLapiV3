@@ -14,22 +14,7 @@ from datetime import datetime
 
 
 def model_data(config):
-    """
-    Process curated game data and build a graph model for analysis.
-
-    This function:
-    1. Loads all required datasets including the curated games list and consolidated game data
-    2. Filters games to only include those that have been curated
-    3. Processes the filtered games in chronological order
-    4. Builds a graph model with nodes for teams, players, games and performances
-    5. Calculates historical statistics for analysis
-
-    Args:
-        config: A Config object containing settings and paths
-
-    Returns:
-        NetworkX graph object - The processed graph
-    """
+    """Process curated game data and build a graph model for analysis."""
     print("Starting model data processing...")
 
     # Define all data dimensions
@@ -40,22 +25,20 @@ def model_data(config):
     dimension_game_rosters = "all_game_rosters"
     dimension_games = "all_boxscores"
     dimension_players = "all_players"
-    dimension_curated = "all_curated"  # IDs of curated games
-    dimension_curated_data = "all_curated_data"  # Combined data for all curated games
+    dimension_curated = "all_curated"
+    dimension_curated_data = "all_curated_data"
 
-    # Load all required datasets
+    # Load required datasets
     print("Loading datasets...")
     data_names = config.load_data(dimension_names)
     data_games = config.load_data(dimension_games)
     data_teams = config.load_data(dimension_teams)
-    data_players = config.load_data(dimension_players)
-    data_shifts = config.load_data(dimension_shifts)
-    data_plays = config.load_data(dimension_plays)
     data_game_roster = config.load_data(dimension_game_rosters)
-    data_curated = config.load_curated_data(dimension_curated)  # Load the curated games list
-    all_curated_data = config.load_curated_data(dimension_curated_data)  # Load the combined game data
+    data_curated, all_curated_data = config.load_curated_data()
 
-    # Check if curated data exists and convert to set for efficient lookups
+    # Clear variables that aren't needed immediately
+
+    # Process curated game IDs
     processed_game_ids = set()
     if data_curated:
         processed_game_ids = set(data_curated)
@@ -63,7 +46,7 @@ def model_data(config):
     else:
         print("Warning: No curated games data found. Processing will continue with no games.")
 
-    # Check if we have the combined curated game data
+    # Check curated game data
     if not all_curated_data:
         print("Warning: No curated game data found. Graph will be incomplete.")
         all_curated_data = {}
@@ -78,7 +61,12 @@ def model_data(config):
 
     print(f"Using {len(filtered_games)} out of {len(data_games)} games that have been curated.")
 
-    # Sort filtered games by game_date for chronological processing
+    # Clear data_games as we now have filtered_games
+    del data_games
+    del data_curated  # Already converted to processed_game_ids set
+    gc.collect()
+
+    # Sort filtered games chronologically
     filtered_games.sort(key=lambda x: x['game_date'] if isinstance(x['game_date'], datetime)
     else datetime.strptime(x['game_date'], '%Y-%m-%d'))
 
@@ -86,8 +74,10 @@ def model_data(config):
         print(
             f"Games sorted chronologically from {filtered_games[0]['game_date']} to {filtered_games[-1]['game_date']}")
 
-    # Create player dictionary from names data
+    # Create player dictionary
     player_list, player_dict = create_player_dict(data_names)
+    del data_names  # No longer needed after creating player_dict
+    gc.collect()
 
     # Initialize the graph
     data_graph = create_graph()
@@ -97,30 +87,48 @@ def model_data(config):
     for i, team in enumerate(data_teams):
         add_team_node(data_graph, team)
 
+    # Clear teams data after adding to graph
+    del data_teams
+    gc.collect()
+
     # Add player nodes
     print("Adding player nodes to graph...")
     for j, player in enumerate(player_list):
         add_player_node(data_graph, player, player_dict)
 
-    # Process games chronologically to build basic graph structure
+    # Clear player data after adding to graph
+    del player_list
+    del player_dict
+    gc.collect()
+
+    # Process games chronologically
     print("Processing games chronologically...")
     process_games_chronologically(data_graph, filtered_games)
 
-    # Create a mapping from game ID to index for efficient lookups
+    # Create mapping for efficient lookups
     game_id_to_index = {game['id']: i for i, game in enumerate(filtered_games)}
 
-    # Filter and sort game rosters to match filtered games
+    # Filter and sort game rosters
     filtered_game_rosters = []
     for roster in data_game_roster:
         if roster and len(roster) > 0 and 'game_id' in roster[0] and roster[0]['game_id'] in processed_game_ids:
             filtered_game_rosters.append(roster)
 
-    # Sort rosters to match the order of filtered_games
+    # Clear original roster data
+    del data_game_roster
+    gc.collect()
+
+    # Create sorted game rosters
     game_id_to_roster = {roster[0]['game_id']: roster for roster in filtered_game_rosters if roster and len(roster) > 0}
     sorted_game_rosters = []
     for game in filtered_games:
         if game['id'] in game_id_to_roster:
             sorted_game_rosters.append(game_id_to_roster[game['id']])
+
+    # Clear intermediate data
+    del filtered_game_rosters
+    del game_id_to_roster
+    gc.collect()
 
     print(f"Matched {len(sorted_game_rosters)} game rosters to filtered games.")
 
@@ -130,6 +138,7 @@ def model_data(config):
     for l, roster in enumerate(sorted_game_rosters):
         if l % 50 == 0:
             print(f"Processing roster {l} of {len(sorted_game_rosters)}")
+            gc.collect()  # Periodic garbage collection
         team_game_map = add_player_game_performance(data_graph, roster)
         team_game_maps.append(team_game_map)
 
@@ -141,7 +150,7 @@ def model_data(config):
         if roster and len(roster) > 0 and 'game_id' in roster[0]:
             game_id_to_map_index[roster[0]['game_id']] = i
 
-    # Process shift data for each game
+    # Process shift data
     print("Processing shift data for each game...")
     shifts = []
     processed_count = 0
@@ -152,12 +161,13 @@ def model_data(config):
         if (m % 40 == 0) and (m != 0):
             print(f'Game {m} of {len(filtered_games)} ({(m / len(filtered_games)) * 100:.1f}%)')
             verbose = True
+            gc.collect()  # Periodic garbage collection
 
         try:
             # Get game ID
             game_id = game['id']
 
-            # Get the shift data from the consolidated data dictionary
+            # Get shift data
             if game_id not in all_curated_data:
                 print(f"Warning: No curated data found for game {game_id}")
                 error_count += 1
@@ -165,13 +175,16 @@ def model_data(config):
 
             shift_data = all_curated_data[game_id]
 
-            # Get the correct team_game_map index for this game
+            # Process shift data
             if game_id in game_id_to_map_index:
                 map_index = game_id_to_map_index[game_id]
                 process_shift_data(data_graph, verbose, team_game_maps[map_index], shift_data)
                 shifts.append(shift_data)
                 update_game_outcome(data_graph, game_id, game)
                 processed_count += 1
+
+                # Clear shift_data after processing
+                shift_data = None
             else:
                 print(f"Warning: Could not find matching team_game_map for game {game_id}")
                 error_count += 1
@@ -182,6 +195,15 @@ def model_data(config):
             error_count += 1
 
     print(f"Processed shift data for {processed_count} games successfully. {error_count} games had errors.")
+
+    # Clear large data structures no longer needed
+    del filtered_games
+    del sorted_game_rosters
+    del team_game_maps
+    del all_curated_data
+    del game_id_to_map_index
+    del shifts
+    gc.collect()
 
     # Build indexes for efficient lookups
     print("Building performance mapping indexes...")
@@ -287,55 +309,59 @@ def model_visualization(config):
                 # Force garbage collection
                 gc.collect()
 
+
 def process_shift_data(data_graph, verbose, team_game_map, shift_data):
-    # called on a per-game basis
+    # Extract only needed data to reduce memory duplication
     game_id = shift_data["game_id"]
-    game_date = shift_data["game_date"]
-    away_team = shift_data["away_teams"]
-    home_team = shift_data["home_teams"]
-    period_id = shift_data["period_id"]
     period_code = shift_data["period_code"]
-    time_index = shift_data["time_index"]
-    time_on_ice = shift_data["time_on_ice"]
-    event_id = shift_data["event_id"]
-    shift_id = shift_data["shift_id"]
-    away_empty_net = shift_data["away_empty_net"]
-    home_empty_net = shift_data["home_empty_net"]
-    away_skaters = shift_data["away_skaters"]
-    home_skaters = shift_data["home_skaters"]
     player_data = shift_data["player_data"]
 
-
-    for i, shift in enumerate(shift_id):
-        # one per shift
+    for i, _ in enumerate(shift_data["shift_id"]):
         team_map = {}
         line_player_team_map = {}
+
+        # Build player-team mapping
         for player_dat in player_data[i]:
-            if player_dat['player_team'] not in team_map:
-                team_map[player_dat['player_team']] = (game_id[i], player_dat['player_team'])
-            game_team = (game_id[i], player_dat['player_team'])
+            player_team = player_dat['player_team']
+            if player_team not in team_map:
+                team_map[player_team] = (game_id[i], player_team)
+
+            game_team = (game_id[i], player_team)
             if game_team not in line_player_team_map:
                 line_player_team_map[game_team] = []
             line_player_team_map[game_team].append(player_dat['player_id'])
 
+        # Process each team
         for team in line_player_team_map:
             other_players = copy.deepcopy(line_player_team_map[team])
-            for j, player_dat in enumerate(player_data[i]):
+
+            for player_dat in player_data[i]:
                 if player_dat['player_id'] not in line_player_team_map[team]:
                     continue
+
                 other_players.remove(player_dat['player_id'])
                 team_tgp = str(team[0]) + '_' + team[1]
                 player_pgp = str(team[0]) + '_' + str(player_dat['player_id'])
-                # if player_data[i][j]['goal'][period_code[i]] == 1:
-                #     print(j, player_dat['player_id'])
-                #     print(line_player_team_map[team])
-                #     print(f"{i}:{j}:{player_data[i][j]['player_team']}:{player_data[i][j]['goal']}")
-                #     print('\n')
+
+                # Update team and player stats
                 update_tgp_stats(data_graph, team_tgp, period_code[i], player_dat)
                 update_pgp_stats(data_graph, player_pgp, period_code[i], player_dat)
-                for k, other in  enumerate(other_players):
+
+                # Update player-player edges
+                for other in other_players:
                     other_pgp = str(team[0]) + '_' + str(other)
                     update_pgp_edge_stats(data_graph, player_pgp, other_pgp, period_code[i], player_dat)
+
+            # Clean up after processing each team
+            other_players = None
+
+        # Clean up after each shift
+        team_map = None
+        line_player_team_map = None
+
+    # Encourage garbage collection after processing complex structures
+    if verbose:
+        gc.collect()
 
 
 def find_goals(player_data):

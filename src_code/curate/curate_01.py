@@ -1,208 +1,81 @@
-import gc
-import multiprocessing as mp
-from multiprocessing import Queue
+import pickle
 from src_code.utils.utils import (
     period_time_to_game_time,
     create_roster_dicts,
     create_ordered_roster,
-    create_player_stats,
-    save_game_data
+    create_player_stats
 )
-from typing import Dict, List, Any
 import copy
 import heapq
-import os
 import pandas as pd
-import pickle
+import gc
+import multiprocessing as mp
+from multiprocessing import Queue
+import traceback
+from typing import Dict, List, Any, Set, Tuple, Optional
+import os
+import time
+from datetime import datetime
 
 
-def curate_data(config):
-    """Main function for parallel game data curation with incremental updates by season."""
+# This function replaces the original curate_data function
+def curate_data(config: Any) -> None:
+    """Main function for parallel game data curation with incremental updates by season.
+
+    This is a wrapper that calls the optimized version of the function.
+    """
+    curate_data_optimized(config)
+
+
+def curate_data_optimized(config: Any) -> None:
+    """Optimized version of curate_data with improved status reporting and better config utilization."""
 
     print("Gathering game data for curation...")
-    # Load data
-    dimension_names = "all_names"
-    dimension_shifts = "all_shifts"
-    dimension_plays = "all_plays"
-    dimension_game_rosters = "all_game_rosters"
-    dimension_games = "all_boxscores"
-    dimension_players = "all_players"
-    dimension_curated = "all_curated"  # IDs of curated games
-    dimension_curated_data = "all_curated_data"  # Combined data for all curated games
-    dimension_seasons = "all_seasons"  # Load this to get seasons data directly
+
+    # Define dimension names
+    dimension_curated = "all_curated"
+    dimension_curated_data = "all_curated_data"
 
     # Check if we need to do a full reload
     do_full_reload = getattr(config, "reload_curate", False)
 
-    # Load data
-    data_names = config.load_data(dimension_names)
-    data_games = config.load_data(dimension_games)
-    data_players = config.load_data(dimension_players)
-    data_shifts = config.load_data(dimension_shifts)
-    data_plays = config.load_data(dimension_plays)
-    data_game_roster = config.load_data(dimension_game_rosters)
-    data_seasons = config.load_data(dimension_seasons)  # Load seasons data
+    # Identify available games using Config method
+    print("Identifying available games...")
+    available_games = config.identify_available_games()
+    print(f"Found {len(available_games)} games with data in all datasets")
 
-    # Log the seasons data we found
-    if data_seasons:
-        print(f"Loaded {len(data_seasons)} seasons from seasons dimension")
-    else:
-        print("Warning: No seasons data found. Will use Season class.")
+    # Create mapping of game_id to season_id using Config method
+    print("Creating game to season mapping...")
+    game_to_season = config.get_game_to_season_mapping()
 
-    # Get seasons to process - try multiple approaches in order of preference
-    selected_seasons = []
-
-    # 1. First try: Use the loaded seasons data if available
-    if data_seasons:
-        # Print the type of the first season to help debugging
-        if data_seasons:
-            print(f"Season data type: {type(data_seasons[0])}")
-
-        # Sort seasons (data_seasons is a list of integers like 20222023)
-        sorted_seasons = sorted(data_seasons, reverse=True)
-        # Take the most recent config.season_count seasons
-        full_season_ids = sorted_seasons[:config.season_count]
-
-        # Convert full season IDs (like 20222023) to the starting year (2022)
-        # This matches the format we'll extract from game IDs
-        selected_seasons = [int(str(s)[:4]) for s in full_season_ids]
-        print(f"Using {len(selected_seasons)} most recent seasons: {selected_seasons}")
-        print(f"  (from full season IDs: {full_season_ids})")
-
-    # 2. Second try: Use the Season class method if first approach fails
-    if not selected_seasons:
-        try:
-            season_objects = config.Season.get_selected_seasons(config.season_count)
-            if season_objects:
-                selected_seasons = [s[0] for s in season_objects]
-                print(f"Using {len(selected_seasons)} seasons from Season class: {selected_seasons}")
-        except Exception as e:
-            print(f"Error getting seasons from Season class: {e}")
-
-    # 3. Last resort: Extract seasons from game IDs if everything else fails
-    if not selected_seasons:
-        print("Extracting seasons from game IDs...")
-        game_seasons = set()
-        for game in data_games:
-            if 'id' in game:
-                try:
-                    # Extract season from game ID (first 4 digits, e.g., 2022020001 -> 2022)
-                    season_str = str(game['id'])[:4]
-                    if len(season_str) == 4 and season_str.isdigit():
-                        game_seasons.add(int(season_str))
-                except (ValueError, TypeError, IndexError):
-                    pass
-
-        if game_seasons:
-            # Take the most recent seasons
-            sorted_game_seasons = sorted(game_seasons, reverse=True)
-            selected_seasons = sorted_game_seasons[:config.season_count]
-            print(f"Extracted {len(selected_seasons)} seasons from game IDs: {selected_seasons}")
-
-    if not selected_seasons:
-        print("ERROR: Could not determine any seasons to process.")
-        return
-
+    # Get the list of selected seasons
+    selected_seasons = [season[0] for season in config.Season.get_selected_seasons(config.season_count)]
     print(f"Processing {len(selected_seasons)} seasons: {', '.join(str(s) for s in selected_seasons)}")
-
-    # Create mapping of game_id to season_id for filtering
-    game_to_season = {}
-    for game in data_games:
-        if 'id' in game:
-            game_id = game['id']
-            # Extract season from game ID (first 4 digits)
-            try:
-                season_str = str(game_id)[:4]
-                if len(season_str) == 4 and season_str.isdigit():
-                    season_id = int(season_str)
-                    game_to_season[game_id] = season_id
-            except (ValueError, TypeError, IndexError):
-                pass
-
-    # Identify games in each dataset
-    play_game_ids = set()
-    for plays in data_plays:
-        if plays and len(plays) > 0 and 'game_id' in plays[0]:
-            play_game_ids.add(plays[0]['game_id'])
-
-    boxscore_game_ids = set()
-    for boxscore in data_games:
-        if 'id' in boxscore:
-            boxscore_game_ids.add(boxscore['id'])
-
-    shift_game_ids = set()
-    for shifts in data_shifts:
-        if shifts and len(shifts) > 0 and 'game_id' in shifts[0]:
-            shift_game_ids.add(shifts[0]['game_id'])
-
-    roster_game_ids = set()
-    for roster in data_game_roster:
-        if roster and len(roster) > 0 and 'game_id' in roster[0]:
-            roster_game_ids.add(roster[0]['game_id'])
-
-    # Find games that have data in all datasets
-    available_games = play_game_ids.intersection(boxscore_game_ids, shift_game_ids, roster_game_ids)
-
-    # Create mappings from game_id to data index
-    play_map = {}
-    for i, plays in enumerate(data_plays):
-        if plays and len(plays) > 0 and 'game_id' in plays[0]:
-            play_map[plays[0]['game_id']] = i
-
-    game_map = {}
-    for i, game in enumerate(data_games):
-        if 'id' in game:
-            game_map[game['id']] = i
-
-    shift_map = {}
-    for i, shifts in enumerate(data_shifts):
-        if shifts and len(shifts) > 0 and 'game_id' in shifts[0]:
-            shift_map[shifts[0]['game_id']] = i
-
-    roster_map = {}
-    for i, roster in enumerate(data_game_roster):
-        if roster and len(roster) > 0 and 'game_id' in roster[0]:
-            roster_map[roster[0]['game_id']] = i
 
     # Process each season separately
     for season in selected_seasons:
         season_str = str(season)
-        print(f"\nProcessing season {season_str}...")
+        print(f"\n=== Processing season {season_str} ===")
 
-        # Load season-specific curated data
+        # Load season-specific curated data using Config methods
+        processed_games = set()
+        all_curated_data = {}
+
         if not do_full_reload:
-            # Try to load existing processed games for this season
-            season_curated_path = config.file_paths[dimension_curated].replace(".pkl", f"_{season_str}.pkl")
-            try:
-                if os.path.exists(season_curated_path):
-                    with open(season_curated_path, 'rb') as file:
-                        processed_games = pickle.load(file)
-                    processed_games = set(processed_games)  # Convert to set for efficient lookups
-                    print(f"Using cached curation data for season {season_str} ({len(processed_games)} games)...")
-                else:
-                    processed_games = set()
-                    print(f"No valid cached curation data for season {season_str}. Processing all games.")
-            except Exception as e:
-                processed_games = set()
-                print(f"Error loading cached curation data for season {season_str}: {str(e)}. Processing all games.")
+            # Use config method to load existing processed games for this season
+            processed_games, all_curated_data = config.load_curated_data_for_season(season)
 
-            # Load existing curated data for this season
-            season_data_path = config.file_paths[dimension_curated_data].replace(".pkl", f"_{season_str}.pkl")
-            try:
-                if os.path.exists(season_data_path):
-                    with open(season_data_path, 'rb') as file:
-                        all_curated_data = pickle.load(file)
-                    print(f"Loaded existing curated data for season {season_str} ({len(all_curated_data)} games).")
-                else:
-                    all_curated_data = {}
-                    print(f"No existing curated data found for season {season_str}. Creating new dataset.")
-            except Exception as e:
-                all_curated_data = {}
-                print(f"Error loading curated data for season {season_str}: {str(e)}. Creating new dataset.")
+            if processed_games:
+                print(f"Using cached curation data for season {season_str} ({len(processed_games)} games)...")
+            else:
+                print(f"No valid cached curation data for season {season_str}. Processing all games.")
+
+            if all_curated_data:
+                print(f"Loaded existing curated data for season {season_str} ({len(all_curated_data)} games).")
+            else:
+                print(f"No existing curated data found for season {season_str}. Creating new dataset.")
         else:
             print(f"Reload requested for season {season_str}. Reprocessing all games.")
-            processed_games = set()
-            all_curated_data = {}
 
         # Filter available games to only include this season
         season_games = {game_id for game_id in available_games
@@ -221,71 +94,45 @@ def curate_data(config):
         if not games_to_process:
             print(f"No new games to process for curation in season {season_str}.")
             # Save the existing data even if no new games were processed
-            config.save_curated_data_seasons(dimension_curated, sorted(list(processed_games)), season)
-            config.save_curated_data_seasons(dimension_curated_data, all_curated_data, season)
             continue
+
+        # Determine number of workers
+        if config.reload_curate is False:
+            sel_workers = 1
+        else:
+            sel_workers = max(1, int(0.5 * config.max_workers))
 
         print(f"Found {len(games_to_process)} games for season {season_str} that need curation...")
+        print(f"Starting parallel processing with {sel_workers} workers")
 
-        # Create process arguments for each game to process in this season
-        process_args = []
-        for game_id in sorted(games_to_process):
-            if (game_id in play_map and game_id in game_map and
-                    game_id in shift_map and game_id in roster_map):
-                # Pass the actual data rather than indices
-                play_data = data_plays[play_map[game_id]]
-                game_data = data_games[game_map[game_id]]
-                shift_data = data_shifts[shift_map[game_id]]
-                roster_data = data_game_roster[roster_map[game_id]]
-
-                process_args.append((
-                    game_id,  # Use game_id instead of index
-                    play_data,
-                    config,
-                    game_data,
-                    shift_data,
-                    roster_data,
-                    None,  # Will be replaced with the queue
-                    None  # Will be replaced with the shared data dictionary
-                ))
-            else:
-                print(f"Warning: Missing data for game {game_id}, skipping.")
-
-        # Clean up large data structures no longer needed for this batch
-        gc.collect()  # Force garbage collection
-
-        # Verify we have games to process
-        if not process_args:
-            print(f"No games with complete data to process for season {season_str}.")
-            continue
-
-        print(f"Processing {len(process_args)} games for season {season_str}...")
+        # Record start time for this season
+        season_start_time = time.time()
 
         # Create manager for shared resources
         with mp.Manager() as manager:
             # Create managed queue and shared dictionary
             result_queue = manager.Queue()
-            curated_data_dict = manager.dict()  # Shared dictionary for all game data
+            curated_data_dict = manager.dict()
 
             # Pre-populate shared dictionary with existing data
             for game_id, game_data in all_curated_data.items():
                 curated_data_dict[game_id] = game_data
 
-            # Update process args with the queue and shared dictionary
-            process_args = [(args[0], args[1], args[2], args[3], args[4], args[5], result_queue, curated_data_dict)
-                            for args in process_args]
+            # Create process arguments with minimal data
+            process_args = [(game_id, config, result_queue, curated_data_dict)
+                            for game_id in sorted(games_to_process)]
 
-            # Start reporter process
+            # Start enhanced reporter process
             reporter_process = mp.Process(
-                target=validation_reporter,
+                target=enhanced_validation_reporter,
                 args=(result_queue, len(process_args))
             )
             reporter_process.start()
 
             # Create pool of workers
-            with mp.Pool(processes=max(1, int(0.5 * config.max_workers))) as pool:
-                # Process games in parallel
-                pool.starmap(process_single_game, process_args)
+            with mp.Pool(processes=sel_workers) as pool:
+                # Process games in parallel using the wrapper function
+                pool.starmap(process_game_wrapper, process_args)
 
                 # Signal reporter that all games are processed
                 result_queue.put(None)  # Sentinel value
@@ -296,19 +143,21 @@ def curate_data(config):
             # Convert manager.dict to regular dict for saving
             all_curated_data = dict(curated_data_dict)
 
-        # Update processed games list with newly processed games
-        newly_processed = set()
-        for args in process_args:
-            game_id = args[0]  # Now this is the actual game_id
-            newly_processed.add(game_id)
+        # Calculate elapsed time for this season
+        season_elapsed_time = time.time() - season_start_time
 
+        # Update processed games list with newly processed games
+        newly_processed = set(games_to_process)
         processed_games.update(newly_processed)
 
-        # Save both the list of processed game IDs and the combined game data for this season
+        # Save using Config methods instead of direct pickle operations
         config.save_curated_data_seasons(dimension_curated, sorted(list(processed_games)), season)
         config.save_curated_data_seasons(dimension_curated_data, all_curated_data, season)
 
-        print(f"Completed processing {len(newly_processed)} new games for curation in season {season_str}.")
+        print(f"\n=== Season {season_str} Summary ===")
+        print(f"Processed {len(newly_processed)} new games in {season_elapsed_time:.2f} seconds")
+        if newly_processed:
+            print(f"Average processing time: {season_elapsed_time / len(newly_processed):.2f} seconds per game")
         print(f"Total curated games data for season {season_str}: {len(all_curated_data)}")
 
         # Cleanup to free memory
@@ -318,7 +167,188 @@ def curate_data(config):
         del all_curated_data
         gc.collect()
 
-    print(f"Completed curation for all {len(selected_seasons)} seasons.")
+    print(f"\n=== Curation Complete ===")
+    print(f"Successfully processed all {len(selected_seasons)} seasons.")
+
+
+def process_game_wrapper(game_id: int, config: Any, result_queue: Queue, curated_data_dict: dict) -> None:
+    """
+    Wrapper function that loads and processes only the data needed for a single game.
+    Uses config methods for data loading.
+
+    Args:
+        game_id: ID of the game to process
+        config: Configuration object
+        result_queue: Queue for reporting results
+        curated_data_dict: Shared dictionary for results
+    """
+    try:
+        # Report status - starting to process this game
+        result_queue.put({
+            'type': 'status',
+            'game_id': game_id,
+            'status': 'started',
+            'timestamp': datetime.now().strftime('%H:%M:%S')
+        })
+
+        # Load only the data needed for this game using Config methods
+        play_data, game_data, shift_data, roster_data = config.load_game_specific_data(game_id)
+
+        # Check if we have all required data
+        if not all([play_data, game_data, shift_data, roster_data]):
+            print(f"Warning: Missing data for game {game_id}, skipping.")
+            # Report status - missing data
+            result_queue.put({
+                'type': 'status',
+                'game_id': game_id,
+                'status': 'missing_data',
+                'timestamp': datetime.now().strftime('%H:%M:%S')
+            })
+            return
+
+        # Process the game with original function
+        process_single_game(game_id, play_data, config, game_data, shift_data, roster_data, result_queue,
+                            curated_data_dict)
+
+        # Report status - finished processing
+        result_queue.put({
+            'type': 'status',
+            'game_id': game_id,
+            'status': 'completed',
+            'timestamp': datetime.now().strftime('%H:%M:%S')
+        })
+
+    except Exception as e:
+        error_trace = traceback.format_exc()
+        print(f"Error processing game {game_id}: {str(e)}\n{error_trace}")
+
+        # Create an error result
+        error_result = {
+            'type': 'validation',
+            'game_id': game_id,
+            'all_good': False,
+            'reasons': [{
+                'type': 'processing_error',
+                'expected': 'successful processing',
+                'actual': f"{str(e)}\n{error_trace}",
+                'difference': 'error occurred'
+            }],
+            'team_sums': None,
+            'game_data': game_data if 'game_data' in locals() else None,
+            'toi_sum': None
+        }
+        result_queue.put(error_result)
+
+
+def enhanced_validation_reporter(result_queue: Queue, total_games: int) -> None:
+    """
+    Enhanced reporter function that provides regular status updates.
+    Collects and reports validation results in game_id order.
+
+    Args:
+        result_queue: Queue containing validation results
+        total_games: Total number of games being processed
+    """
+    results_heap = []  # For storing validation results
+    games_processed = 0
+    games_started = 0
+    games_completed = 0
+    games_with_errors = 0
+    games_missing_data = 0
+    next_game_to_report = None
+
+    # Set up progress tracking
+    start_time = time.time()
+    last_update_time = start_time
+
+    while True:
+        # Get result from queue
+        result = result_queue.get()
+
+        # Check for sentinel value indicating completion
+        if result is None:
+            # Print final statistics
+            elapsed_time = time.time() - start_time
+            print(f"\n=== Processing Complete ===")
+            print(f"Total time: {elapsed_time:.2f} seconds")
+            print(f"Games processed: {games_completed}/{total_games}")
+            print(f"Games with errors: {games_with_errors}")
+            print(f"Games missing data: {games_missing_data}")
+
+            # Process any remaining validation results in the heap
+            while results_heap:
+                _, result = heapq.heappop(results_heap)
+                report_result(result)
+            break
+
+        # Handle different types of messages
+        if 'type' in result:
+            if result['type'] == 'status':
+                # Process status update
+                if result['status'] == 'started':
+                    games_started += 1
+                elif result['status'] == 'completed':
+                    games_completed += 1
+                elif result['status'] == 'missing_data':
+                    games_missing_data += 1
+
+                # Print periodic progress updates (every 5 seconds)
+                current_time = time.time()
+                if current_time - last_update_time > 5:
+                    elapsed_time = current_time - start_time
+                    estimated_total = (elapsed_time / games_completed) * total_games if games_completed > 0 else 0
+                    remaining_time = estimated_total - elapsed_time if estimated_total > 0 else "unknown"
+
+                    print(f"\n--- Progress Update [{datetime.now().strftime('%H:%M:%S')}] ---")
+                    print(f"Started: {games_started}/{total_games} games ({games_started / total_games * 100:.1f}%)")
+                    print(
+                        f"Completed: {games_completed}/{total_games} games ({games_completed / total_games * 100:.1f}%)")
+                    print(f"Missing data: {games_missing_data} games")
+                    print(f"Errors: {games_with_errors} games")
+                    if games_completed > 0:
+                        print(f"Avg. processing time: {elapsed_time / games_completed:.2f} sec/game")
+                        print(f"Est. time remaining: {remaining_time:.1f} seconds" if isinstance(remaining_time,
+                                                                                                 float) else f"Est. time remaining: {remaining_time}")
+                    print(f"---------------------------")
+
+                    last_update_time = current_time
+
+            elif result['type'] == 'validation':
+                # Process validation result
+                games_processed += 1
+
+                if not result.get('all_good', True):
+                    games_with_errors += 1
+
+                # Add to heap
+                heapq.heappush(results_heap, (result['game_id'], result))
+
+                # Process results in order
+                while results_heap and (next_game_to_report is None or
+                                        results_heap[0][0] == next_game_to_report):
+                    _, result_to_report = heapq.heappop(results_heap)
+                    report_result(result_to_report)
+
+                    # Update next expected game
+                    next_game_to_report = result_to_report['game_id'] + 1
+        else:
+            # Legacy format handling
+            if 'game_id' in result:
+                games_processed += 1
+                if not result.get('all_good', True):
+                    games_with_errors += 1
+
+                # Add to heap
+                heapq.heappush(results_heap, (result['game_id'], result))
+
+                # Process results in order
+                while results_heap and (next_game_to_report is None or
+                                        results_heap[0][0] == next_game_to_report):
+                    _, result_to_report = heapq.heappop(results_heap)
+                    report_result(result_to_report)
+
+                    # Update next expected game
+                    next_game_to_report = result_to_report['game_id'] + 1
 
 
 def process_single_game(game_id: int,

@@ -1,3 +1,4 @@
+import gc
 import os
 import pickle
 from config.playbyplay import PlayByPlay
@@ -246,6 +247,216 @@ class Config:
                     print(f"Error loading curated data for season {season_str}: {str(e)}")
 
         return all_game_ids, all_game_data
+
+    def load_curated_data_for_season(self, season):
+        """Load curated data for a specific season.
+
+        Args:
+            season: The season identifier (e.g., 2023)
+
+        Returns:
+            A tuple of:
+            - set of curated game IDs for the season
+            - dictionary of curated game data for the season
+        """
+        season_str = str(season)
+        game_ids = set()
+        game_data = {}
+
+        # Load game IDs
+        curated_path = self.file_paths["all_curated"].replace(".pkl", f"_{season_str}.pkl")
+        if os.path.exists(curated_path):
+            try:
+                with open(curated_path, 'rb') as file:
+                    season_ids = pickle.load(file)
+                if isinstance(season_ids, list):
+                    season_ids = set(season_ids)
+                game_ids = season_ids
+                print(f"Loaded {len(game_ids)} curated game IDs from season {season_str}")
+            except Exception as e:
+                print(f"Error loading curated IDs for season {season_str}: {str(e)}")
+
+        # Load game data
+        data_path = self.file_paths["all_curated_data"].replace(".pkl", f"_{season_str}.pkl")
+        if os.path.exists(data_path):
+            try:
+                with open(data_path, 'rb') as file:
+                    season_data = pickle.load(file)
+                game_data = season_data
+                print(f"Loaded {len(game_data)} curated game data entries from season {season_str}")
+            except Exception as e:
+                print(f"Error loading curated data for season {season_str}: {str(e)}")
+
+        return game_ids, game_data
+
+    def load_single_record(self, dimension, index):
+        """Load a single record from a dataset without loading the entire dataset in memory.
+
+        Args:
+            dimension: The dimension name (e.g., 'all_plays')
+            index: The index of the record to load
+
+        Returns:
+            The record at the specified index, or None if not found
+        """
+        try:
+            with open(self.file_paths[dimension], 'rb') as file:
+                data = pickle.load(file)
+                record = data[index] if 0 <= index < len(data) else None
+                # Immediately clear the large data object
+                del data
+                return record
+        except Exception as e:
+            print(f"Error loading record from {dimension} at index {index}: {str(e)}")
+            return None
+
+    def load_game_play_data(self, game_id: int):
+        """Load play data for a specific game ID."""
+        try:
+            with open(self.file_paths['all_plays'], 'rb') as file:
+                all_plays = pickle.load(file)
+                for plays in all_plays:
+                    if plays and len(plays) > 0 and 'game_id' in plays[0] and plays[0]['game_id'] == game_id:
+                        return plays
+            return None
+        except Exception as e:
+            print(f"Error loading play data for game {game_id}: {str(e)}")
+            return None
+        finally:
+            # Encourage garbage collection
+            gc.collect()
+
+    def load_game_boxscore_data(self, game_id: int):
+        """Load boxscore data for a specific game ID."""
+        try:
+            with open(self.file_paths['all_boxscores'], 'rb') as file:
+                all_games = pickle.load(file)
+                for game in all_games:
+                    if 'id' in game and game['id'] == game_id:
+                        return game
+            return None
+        except Exception as e:
+            print(f"Error loading boxscore data for game {game_id}: {str(e)}")
+            return None
+        finally:
+            # Encourage garbage collection
+            gc.collect()
+
+    def load_game_shift_data(self, game_id: int):
+        """Load shift data for a specific game ID."""
+        try:
+            with open(self.file_paths['all_shifts'], 'rb') as file:
+                all_shifts = pickle.load(file)
+                for shifts in all_shifts:
+                    if shifts and len(shifts) > 0 and 'game_id' in shifts[0] and shifts[0]['game_id'] == game_id:
+                        return shifts
+            return None
+        except Exception as e:
+            print(f"Error loading shift data for game {game_id}: {str(e)}")
+            return None
+        finally:
+            # Encourage garbage collection
+            gc.collect()
+
+    def load_game_roster_data(self, game_id: int):
+        """Load roster data for a specific game ID."""
+        try:
+            with open(self.file_paths['all_game_rosters'], 'rb') as file:
+                all_rosters = pickle.load(file)
+                for roster in all_rosters:
+                    if roster and len(roster) > 0 and 'game_id' in roster[0] and roster[0]['game_id'] == game_id:
+                        return roster
+            return None
+        except Exception as e:
+            print(f"Error loading roster data for game {game_id}: {str(e)}")
+            return None
+        finally:
+            # Encourage garbage collection
+            gc.collect()
+
+    def load_game_specific_data(self, game_id: int):
+        """Load all data specific to a game ID."""
+        play_data = self.load_game_play_data(game_id)
+        game_data = self.load_game_boxscore_data(game_id)
+        shift_data = self.load_game_shift_data(game_id)
+        roster_data = self.load_game_roster_data(game_id)
+
+        return play_data, game_data, shift_data, roster_data
+
+    def identify_available_games(self):
+        """Identify games that have data in all required datasets."""
+        play_game_ids = set()
+        boxscore_game_ids = set()
+        shift_game_ids = set()
+        roster_game_ids = set()
+
+        # Get play game IDs
+        try:
+            data = self.load_data('all_plays')
+            if data:
+                for plays in data:
+                    if plays and len(plays) > 0 and 'game_id' in plays[0]:
+                        play_game_ids.add(plays[0]['game_id'])
+        except Exception as e:
+            print(f"Error loading play game IDs: {str(e)}")
+
+        # Get boxscore game IDs
+        try:
+            data = self.load_data('all_boxscores')
+            if data:
+                for game in data:
+                    if 'id' in game:
+                        boxscore_game_ids.add(game['id'])
+        except Exception as e:
+            print(f"Error loading boxscore game IDs: {str(e)}")
+
+        # Get shift game IDs
+        try:
+            data = self.load_data('all_shifts')
+            if data:
+                for shifts in data:
+                    if shifts and len(shifts) > 0 and 'game_id' in shifts[0]:
+                        shift_game_ids.add(shifts[0]['game_id'])
+        except Exception as e:
+            print(f"Error loading shift game IDs: {str(e)}")
+
+        # Get roster game IDs
+        try:
+            data = self.load_data('all_game_rosters')
+            if data:
+                for roster in data:
+                    if roster and len(roster) > 0 and 'game_id' in roster[0]:
+                        roster_game_ids.add(roster[0]['game_id'])
+        except Exception as e:
+            print(f"Error loading roster game IDs: {str(e)}")
+
+        # Force garbage collection
+        gc.collect()
+
+        # Return games that have data in all datasets
+        return play_game_ids.intersection(boxscore_game_ids, shift_game_ids, roster_game_ids)
+
+    def get_game_to_season_mapping(self):
+        """Create mapping of game_id to season_id."""
+        game_to_season = {}
+
+        try:
+            data = self.load_data('all_boxscores')
+            if data:
+                for game in data:
+                    if 'id' in game:
+                        game_id = game['id']
+                        # Get the game object to access season_id
+                        game_obj = self.Game.get_game(game_id)
+                        if game_obj and hasattr(game_obj, 'season_id'):
+                            game_to_season[game_id] = game_obj.season_id
+        except Exception as e:
+            print(f"Error creating game to season mapping: {str(e)}")
+
+        # Force garbage collection
+        gc.collect()
+
+        return game_to_season
 
     @staticmethod
     def shift_registry():

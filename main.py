@@ -27,9 +27,9 @@ def main():
     }
     config = Config(config_dict)
     config_model = ConfigModel()
-    get_data(config)
-    curate_data(config)
-    model_data(config)
+    # get_data(config)
+    # curate_data(config)
+    # model_data(config)
     model_visualization(config)
     # run_gnn_enhanced(config, config_model)
 
