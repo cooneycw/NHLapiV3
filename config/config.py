@@ -204,47 +204,161 @@ class Config:
             print(f"Error saving {dimension_base} data for season {season_str}: {str(e)}")
 
     def load_curated_data(self):
-        """Load curated data from all season-specific files.
+        """Load curated data from all season-specific files."""
+        print(f"Loading curated data with season_count = {self.season_count}...")
 
-        Returns:
-            A tuple of:
-            - set of all curated game IDs
-            - dictionary of all curated game data
-        """
-        # Get the list of selected seasons
-        selected_seasons = [season[0] for season in self.Season.get_selected_seasons(self.season_count)]
+        # First try using the Season class
+        selected_seasons_result = self.Season.get_selected_seasons(self.season_count)
+
+        # If that doesn't work, load seasons directly from disk
+        if not selected_seasons_result:
+            print("Season.get_selected_seasons returned empty list. Loading seasons from disk...")
+
+            try:
+                seasons_file = self.file_paths["all_seasons"]
+                if os.path.exists(seasons_file):
+                    with open(seasons_file, 'rb') as file:
+                        all_seasons = pickle.load(file)
+
+                    print(f"Loaded {len(all_seasons)} seasons from disk")
+
+                    # Handle different possible season data structures
+                    if isinstance(all_seasons, list):
+                        # If the seasons are just integers
+                        if all(isinstance(s, int) for s in all_seasons):
+                            # Sort in descending order (newest first)
+                            selected_seasons = sorted(all_seasons, reverse=True)[:self.season_count]
+                        # If seasons are objects or dictionaries
+                        else:
+                            # Try multiple ways to extract and sort seasons
+                            try:
+                                # If seasons have an 'id' attribute
+                                sorted_seasons = sorted(all_seasons,
+                                                        key=lambda s: getattr(s, 'id', 0) if hasattr(s, 'id') else 0,
+                                                        reverse=True)
+                                selected_seasons = []
+                                for s in sorted_seasons[:self.season_count]:
+                                    if hasattr(s, 'id'):
+                                        selected_seasons.append(s.id)
+                                    else:
+                                        # If no id, try to use the season object itself
+                                        selected_seasons.append(s)
+                            except:
+                                # Fallback: just use the first N seasons
+                                selected_seasons = all_seasons[:self.season_count]
+                    else:
+                        # If all_seasons is not a list, use hardcoded values
+                        print(f"Unexpected seasons data format: {type(all_seasons)}")
+                        selected_seasons = [2023, 2022, 2021][:self.season_count]
+                else:
+                    print(f"Seasons file not found: {seasons_file}")
+                    selected_seasons = [2023, 2022, 2021][:self.season_count]
+            except Exception as e:
+                print(f"Error loading seasons from disk: {str(e)}")
+                selected_seasons = [2023, 2022, 2021][:self.season_count]
+        else:
+            # Extract season IDs from the result
+            selected_seasons = []
+            for item in selected_seasons_result:
+                if isinstance(item, tuple) and len(item) > 0:
+                    selected_seasons.append(item[0])
+                elif isinstance(item, (int, str)):
+                    selected_seasons.append(item)
+                elif hasattr(item, 'id'):
+                    selected_seasons.append(item.id)
+                else:
+                    print(f"Skipping unknown season format: {item}")
+
+        print(f"Using seasons: {selected_seasons}")
 
         # Initialize result containers
         all_game_ids = set()
         all_game_data = {}
 
-        # Load data for each season
-        for season in selected_seasons:
-            season_str = str(season)
+        # First, try to load from the base "all_curated" and "all_curated_data" files
+        print("Checking for base curated files...")
+        base_files_found = False
 
-            # Load game IDs
-            curated_path = self.file_paths["all_curated"].replace(".pkl", f"_{season_str}.pkl")
-            if os.path.exists(curated_path):
-                try:
-                    with open(curated_path, 'rb') as file:
-                        season_ids = pickle.load(file)
-                    if isinstance(season_ids, list):
-                        season_ids = set(season_ids)
-                    all_game_ids.update(season_ids)
-                    print(f"Loaded {len(season_ids)} curated game IDs from season {season_str}")
-                except Exception as e:
-                    print(f"Error loading curated IDs for season {season_str}: {str(e)}")
+        # Try base curated IDs file
+        if os.path.exists(self.file_paths["all_curated"]):
+            try:
+                with open(self.file_paths["all_curated"], 'rb') as file:
+                    loaded_ids = pickle.load(file)
+                if isinstance(loaded_ids, list):
+                    loaded_ids = set(loaded_ids)
+                all_game_ids.update(loaded_ids)
+                print(f"Loaded {len(loaded_ids)} curated game IDs from base file")
+                base_files_found = True
+            except Exception as e:
+                print(f"Error loading curated IDs from base file: {str(e)}")
 
-            # Load game data
-            data_path = self.file_paths["all_curated_data"].replace(".pkl", f"_{season_str}.pkl")
-            if os.path.exists(data_path):
-                try:
-                    with open(data_path, 'rb') as file:
-                        season_data = pickle.load(file)
-                    all_game_data.update(season_data)
-                    print(f"Loaded {len(season_data)} curated game data entries from season {season_str}")
-                except Exception as e:
-                    print(f"Error loading curated data for season {season_str}: {str(e)}")
+        # Try base curated data file
+        if os.path.exists(self.file_paths["all_curated_data"]):
+            try:
+                with open(self.file_paths["all_curated_data"], 'rb') as file:
+                    loaded_data = pickle.load(file)
+                all_game_data.update(loaded_data)
+                print(f"Loaded {len(loaded_data)} curated game data entries from base file")
+                base_files_found = True
+            except Exception as e:
+                print(f"Error loading curated data from base file: {str(e)}")
+
+        # If we found base files, we can skip season-specific files
+        if base_files_found:
+            print("Successfully loaded data from base files.")
+        else:
+            # Otherwise, try to load from season-specific files
+            print("Trying season-specific files...")
+
+            # Look for curated data files in the storage directory
+            storage_dir = os.path.dirname(self.file_paths["all_curated"])
+            print(f"Checking storage directory: {storage_dir}")
+
+            if os.path.exists(storage_dir):
+                # List all files in the directory
+                all_files = os.listdir(storage_dir)
+
+                # Look for curated_*.pkl and curated_data_*.pkl files
+                curated_id_files = [f for f in all_files if f.startswith("all_curated_") and not f.startswith(
+                    "all_curated_data_") and f.endswith(".pkl")]
+                curated_data_files = [f for f in all_files if f.startswith("all_curated_data_") and f.endswith(".pkl")]
+
+                print(
+                    f"Found {len(curated_id_files)} curated ID files and {len(curated_data_files)} curated data files")
+
+                # Process each curated ID file
+                for file_name in curated_id_files:
+                    try:
+                        file_path = os.path.join(storage_dir, file_name)
+                        with open(file_path, 'rb') as file:
+                            loaded_ids = pickle.load(file)
+                        if isinstance(loaded_ids, list):
+                            loaded_ids = set(loaded_ids)
+                        all_game_ids.update(loaded_ids)
+                        print(f"Loaded {len(loaded_ids)} curated game IDs from {file_name}")
+                    except Exception as e:
+                        print(f"Error loading curated IDs from {file_name}: {str(e)}")
+
+                # Process each curated data file
+                for file_name in curated_data_files:
+                    try:
+                        file_path = os.path.join(storage_dir, file_name)
+                        with open(file_path, 'rb') as file:
+                            loaded_data = pickle.load(file)
+                        all_game_data.update(loaded_data)
+                        print(f"Loaded {len(loaded_data)} curated game data entries from {file_name}")
+                    except Exception as e:
+                        print(f"Error loading curated data from {file_name}: {str(e)}")
+            else:
+                print(f"Storage directory not found: {storage_dir}")
+
+        print(f"Total curated game IDs: {len(all_game_ids)}")
+        print(f"Total curated game data entries: {len(all_game_data)}")
+
+        # Print the first few game IDs to verify we've loaded something
+        if all_game_ids:
+            sample_ids = list(all_game_ids)[:5]
+            print(f"Sample game IDs: {sample_ids}")
 
         return all_game_ids, all_game_data
 
