@@ -2,14 +2,15 @@ from src_code.utils.utils import load_game_data, create_player_dict
 from src_code.utils.graph_utils import (
     create_graph, add_team_node, add_player_node, add_game, process_games_chronologically,
     add_player_game_performance, update_tgp_stats, update_pgp_stats, update_pgp_edge_stats,
-    update_game_outcome, get_historical_tgp_stats, get_historical_pgp_stats,
+    update_game_outcome,
     calculate_historical_stats,
     build_game_to_pgp_index, build_game_to_pgp_edges_index)
 from src_code.utils.display_graph_utils import visualize_game_graph
-from src_code.utils.save_graph_utils import save_graph, load_graph
+from src_code.utils.save_graph_utils import save_graph, load_filtered_graph
 import copy
 import gc
 import matplotlib.pyplot as plt
+import traceback
 from datetime import datetime
 
 
@@ -189,7 +190,6 @@ def model_data(config):
                 print(f"Warning: Could not find matching team_game_map for game {game_id}")
                 error_count += 1
         except Exception as e:
-            import traceback
             error_trace = traceback.format_exc()
             print(f"Error processing game {game['id']}: {str(e)}\n{error_trace}")
             error_count += 1
@@ -222,6 +222,149 @@ def model_data(config):
     return data_graph
 
 
+def diagnose_graph(graph, sample_game_id=None):
+    """
+    Comprehensive diagnostic function to analyze the structure of the graph.
+
+    Args:
+        graph: NetworkX graph to analyze
+        sample_game_id: Optional specific game ID to analyze in detail
+    """
+    print("\n===== GRAPH STRUCTURE DIAGNOSIS =====")
+
+    # 1. Basic graph statistics
+    print(f"\nTotal nodes: {len(graph.nodes)}")
+    print(f"Total edges: {len(graph.edges)}")
+
+    # 2. Count nodes by type
+    node_types = {}
+    for node, data in graph.nodes(data=True):
+        node_type = data.get('type', 'unknown')
+        node_types[node_type] = node_types.get(node_type, 0) + 1
+
+    print("\nNode types:")
+    for node_type, count in node_types.items():
+        print(f"  {node_type}: {count}")
+
+    # 3. Count edges by type
+    edge_types = {}
+    for u, v, data in graph.edges(data=True):
+        edge_type = data.get('type', 'unknown')
+        edge_types[edge_type] = edge_types.get(edge_type, 0) + 1
+
+    print("\nEdge types:")
+    for edge_type, count in edge_types.items():
+        print(f"  {edge_type}: {count}")
+
+    # 4. If sample game provided, analyze in detail
+    if sample_game_id and sample_game_id in graph.nodes:
+        print(f"\nDetailed analysis for game {sample_game_id}:")
+
+        # Get game data
+        game_data = graph.nodes[sample_game_id]
+        home_team = game_data.get('home_team', 'unknown')
+        away_team = game_data.get('away_team', 'unknown')
+        print(f"  Home team: {home_team}")
+        print(f"  Away team: {away_team}")
+
+        # Find TGP nodes for this game
+        home_tgp = f"{sample_game_id}_{home_team}"
+        away_tgp = f"{sample_game_id}_{away_team}"
+        tgp_exists = []
+        if home_tgp in graph.nodes:
+            tgp_exists.append(home_tgp)
+        if away_tgp in graph.nodes:
+            tgp_exists.append(away_tgp)
+
+        print(f"  TGP nodes found: {len(tgp_exists)} of 2 expected")
+
+        # Find PGP nodes for this game
+        pgp_nodes = []
+        for node in graph.nodes():
+            if isinstance(node, str) and node.startswith(f"{sample_game_id}_") and graph.nodes[node].get(
+                    'type') == 'player_game_performance':
+                pgp_nodes.append(node)
+
+        print(f"  PGP nodes found: {len(pgp_nodes)}")
+        print(f"  PGP nodes by team:")
+
+        home_pgp = [n for n in pgp_nodes if graph.nodes[n].get('player_team') == home_team]
+        away_pgp = [n for n in pgp_nodes if graph.nodes[n].get('player_team') == away_team]
+        print(f"    {home_team}: {len(home_pgp)}")
+        print(f"    {away_team}: {len(away_pgp)}")
+
+        # Check if PGP nodes have data
+        print("\n  PGP nodes statistics (first 3 from each team):")
+        for team, pgp_list in [(home_team, home_pgp), (away_team, away_pgp)]:
+            print(f"    {team} players:")
+            for i, pgp in enumerate(pgp_list[:3]):
+                node_data = graph.nodes[pgp]
+                player_name = node_data.get('player_name', 'Unknown')
+                stats = {
+                    'toi': node_data.get('toi', [0, 0, 0]),
+                    'goal': node_data.get('goal', [0, 0, 0]),
+                    'assist': node_data.get('assist', [0, 0, 0]),
+                    'shot_on_goal': node_data.get('shot_on_goal', [0, 0, 0])
+                }
+                print(f"      {i + 1}. {player_name} ({pgp}):")
+                print(f"         TOI: {stats['toi']}")
+                print(f"         Goals: {stats['goal']}")
+                print(f"         Assists: {stats['assist']}")
+                print(f"         Shots: {stats['shot_on_goal']}")
+
+        # Check PGP-to-PGP edges
+        pgp_pgp_edges = []
+        for u, v, data in graph.edges(data=True):
+            if (isinstance(u, str) and isinstance(v, str) and
+                    u.startswith(f"{sample_game_id}_") and v.startswith(f"{sample_game_id}_") and
+                    graph.nodes[u].get('type') == 'player_game_performance' and
+                    graph.nodes[v].get('type') == 'player_game_performance'):
+                pgp_pgp_edges.append((u, v))
+
+        print(f"\n  PGP-to-PGP edges found: {len(pgp_pgp_edges)}")
+
+        # Check a sample of PGP-to-PGP edges
+        if pgp_pgp_edges:
+            print("  Sample PGP-to-PGP edge data (first 3):")
+            for i, (u, v) in enumerate(pgp_pgp_edges[:3]):
+                edge_data = graph.get_edge_data(u, v)
+                u_name = graph.nodes[u].get('player_name', 'Unknown')
+                v_name = graph.nodes[v].get('player_name', 'Unknown')
+                stats = {
+                    'toi': edge_data.get('toi', [0, 0, 0]),
+                    'goal': edge_data.get('goal', [0, 0, 0]),
+                }
+                print(f"    {i + 1}. {u_name} <-> {v_name}:")
+                print(f"       TOI: {stats['toi']}")
+                print(f"       Goals: {stats['goal']}")
+
+                # Check for historical data
+                has_hist = False
+                for key in edge_data:
+                    if key.startswith('hist_'):
+                        has_hist = True
+                        break
+                print(f"       Has historical data: {has_hist}")
+
+        # Check for 'game_to_pgp' index
+        print("\n  Graph indices:")
+        has_pgp_index = 'game_to_pgp' in graph.graph
+        has_edge_index = 'game_to_pgp_edges' in graph.graph
+        print(f"    Has game_to_pgp index: {has_pgp_index}")
+        print(f"    Has game_to_pgp_edges index: {has_edge_index}")
+
+        # If indices exist, check their content for this game
+        if has_pgp_index:
+            pgp_index_count = len(graph.graph['game_to_pgp'].get(int(sample_game_id), []))
+            print(f"    PGP entries in index for this game: {pgp_index_count}")
+
+        if has_edge_index:
+            edge_index_count = len(graph.graph['game_to_pgp_edges'].get(int(sample_game_id), []))
+            print(f"    PGP edge entries in index for this game: {edge_index_count}")
+
+    print("\n===== END OF DIAGNOSIS =====\n")
+
+
 def model_visualization(config):
     """
     Generate visualizations for games in the graph, with optional date filtering.
@@ -229,19 +372,25 @@ def model_visualization(config):
     Args:
         config: A Config object containing settings and paths
     """
-    from src_code.utils.save_graph_utils import load_graph, load_filtered_graph
-
     # Check if we should apply date filtering
     training_cutoff_date = config.split_data if hasattr(config, 'split_data') else None
 
-    # Load graph with optional date filtering
-    if training_cutoff_date:
-        print(f"Loading graph with date filtering (games on or after {training_cutoff_date})...")
-        data_graph = load_filtered_graph(config.file_paths["graph"], training_cutoff_date)
-    else:
-        print("Loading complete graph (no date filtering)...")
-        data_graph = load_graph(config.file_paths["graph"])
+    print(f"Starting visualization process...")
+    data_graph = load_filtered_graph(config.file_paths["graph"], cutoff_date=training_cutoff_date)
 
+    print(f"Graph loaded with {len(data_graph.nodes)} nodes and {len(data_graph.edges)} edges")
+
+    # Rebuild the missing indices if they don't exist
+    print("Checking and rebuilding indices if needed...")
+    if 'game_to_pgp' not in data_graph.graph:
+        print("Rebuilding game_to_pgp index...")
+        build_game_to_pgp_index(data_graph)
+
+    if 'game_to_pgp_edges' not in data_graph.graph:
+        print("Rebuilding game_to_pgp_edges index...")
+        build_game_to_pgp_edges_index(data_graph)
+
+    # Get games and apply filtering if needed
     dimension_games = "all_boxscores"
     data_games = config.load_data(dimension_games)
 
@@ -256,7 +405,6 @@ def model_visualization(config):
                 # Convert string dates to datetime.date objects if needed
                 if isinstance(game_date, str):
                     try:
-                        from datetime import datetime
                         game_date = datetime.strptime(game_date, '%Y-%m-%d').date()
                     except:
                         # If date parsing fails, include the game
@@ -277,34 +425,46 @@ def model_visualization(config):
 
         print(f"Date filtering: Excluded {excluded_count} games before {training_cutoff_date}")
         print(f"Generating visualizations for {len(filtered_games)} games...")
-        data_games = filtered_games
+        visualization_games = filtered_games
     else:
         print(f"Generating visualizations for all {len(data_games)} games...")
+        visualization_games = data_games
+
+    # Run a quick diagnostic on the graph
+    print("Running graph diagnostics...")
+    sample_game_id = visualization_games[0]['id'] if visualization_games else None
+    if sample_game_id:
+        diagnose_graph(data_graph, sample_game_id)
 
     # Generate visualizations
-    for m, game in enumerate(data_games):
+    for m, game in enumerate(visualization_games):
         # Check if game exists in the filtered graph
         game_id = game.get('id')
         if game_id not in data_graph.nodes:
+            print(f"Skipping game {game_id} - not found in filtered graph")
             continue
 
         # Create visualization for every 10th game or the last game
-        if m % 10 == 0 or m == len(data_games) - 1:
-            print(f'Generating visualization for game {game["id"]}')
+        if m % 10 == 0 or m == len(visualization_games) - 1:
+            print(f'Generating visualization for game {game_id}')
 
             # Generate visualizations for different window sizes
             for window_size in config.stat_window_sizes:
-                output_path = (f"{config.file_paths['game_output_jpg']}/game_{game['id']}_"
+                output_path = (f"{config.file_paths['game_output_jpg']}/game_{game_id}_"
                                f"network_{game['game_date']}_window{window_size}.jpg")
 
-                visualize_game_graph(
-                    data_graph,
-                    game['id'],
-                    window_size=window_size,
-                    output_path=output_path,
-                    edge_sample_rate=0.05,
-                )
-                plt.close('all')
+                try:
+                    visualize_game_graph(
+                        data_graph,
+                        game_id,
+                        window_size=window_size,
+                        output_path=output_path,
+                        edge_sample_rate=0.05,
+                    )
+                    plt.close('all')
+                except Exception as e:
+                    print(f"Error visualizing game {game_id}: {str(e)}")
+                    print(traceback.format_exc())
 
                 # Force garbage collection
                 gc.collect()

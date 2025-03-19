@@ -65,224 +65,252 @@ def _make_json_serializable(obj):
     return obj
 
 
-def load_graph(input_path, format='pickle'):
+def load_graph(input_path, format=None):
     """
-    Load a previously saved network graph.
+    Load a previously saved network graph with automatic format detection.
 
     Parameters:
     -----------
     input_path : str
         Path to the saved graph file
-    format : str
+    format : str, optional
         Format the graph was saved in ('pickle' or 'json')
+        If None, will attempt to auto-detect format
 
     Returns:
     --------
     networkx.Graph
         The loaded network graph
     """
+    import pickle
+    import json
+    import networkx as nx
+
+    # Auto-detect format if not specified
+    if format is None:
+        # Check file extension
+        path_str = str(input_path)
+        if path_str.endswith('.pkl') or path_str.endswith('.pickle'):
+            format = 'pickle'
+        elif path_str.endswith('.json'):
+            format = 'json'
+        else:
+            # Try to detect format by looking at the first few bytes
+            try:
+                with open(input_path, 'rb') as f:
+                    first_bytes = f.read(4)
+                    # JSON files typically start with { which is 0x7B in ASCII/UTF-8
+                    if first_bytes.startswith(b'{') or first_bytes.startswith(b'['):
+                        format = 'json'
+                        print(f"Auto-detected format as JSON based on file content")
+                    else:
+                        format = 'pickle'
+                        print(f"Auto-detected format as pickle based on file content")
+            except Exception as e:
+                print(f"Error during format auto-detection: {e}")
+                print(f"Defaulting to JSON format (the save_graph default)")
+                format = 'json'
+
+    print(f"Loading graph in {format} format from {input_path}")
+
     if format == 'pickle':
-        with open(input_path, 'rb') as f:
-            return pickle.load(f)
+        try:
+            with open(input_path, 'rb') as f:
+                return pickle.load(f)
+        except Exception as e:
+            print(f"Error loading as pickle: {e}")
+            print("Attempting to load as JSON instead...")
+            format = 'json'
 
-    elif format == 'json':
-        with open(input_path, 'r') as f:
-            graph_data = json.load(f)
+    if format == 'json':
+        try:
+            with open(input_path, 'r') as f:
+                graph_data = json.load(f)
 
-        # Create new graph and populate it
-        G = nx.Graph()
+            # Create new graph and populate it
+            G = nx.Graph()
 
-        # Add nodes with their attributes
-        for node, attrs in graph_data['nodes']:
-            G.add_node(node, **attrs)
+            # Add nodes with their attributes
+            for node, attrs in graph_data['nodes']:
+                G.add_node(node, **attrs)
 
-        # Add edges with their attributes
-        for u, v, attrs in graph_data['edges']:
-            G.add_edge(u, v, **attrs)
+            # Add edges with their attributes
+            for u, v, attrs in graph_data['edges']:
+                G.add_edge(u, v, **attrs)
 
-        return G
+            print(f"Successfully loaded graph with {len(G.nodes)} nodes and {len(G.edges)} edges")
+            return G
+
+        except UnicodeDecodeError:
+            # If we get a unicode error, try again as binary JSON
+            print("Error: Failed as text JSON, attempting binary JSON load")
+            try:
+                with open(input_path, 'rb') as f:
+                    graph_data = json.load(f)
+
+                # Create new graph and populate it
+                G = nx.Graph()
+
+                # Add nodes with their attributes
+                for node, attrs in graph_data['nodes']:
+                    G.add_node(node, **attrs)
+
+                # Add edges with their attributes
+                for u, v, attrs in graph_data['edges']:
+                    G.add_edge(u, v, **attrs)
+
+                return G
+            except Exception as e:
+                print(f"Error during binary JSON load: {e}")
+                raise ValueError(f"Unable to load graph from {input_path} in any supported format")
+
+    raise ValueError(f"Unsupported format: {format}")
 
 
-def load_filtered_graph(graph_path, cutoff_date=None):
+def load_filtered_graph(input_path, cutoff_date=None, format=None):
     """
-    Load a NetworkX graph and filter out games before a cutoff date during the loading process.
+    Load a network graph with filtering based on game dates.
 
-    Args:
-        graph_path: Path to the saved graph file
-        cutoff_date: Optional datetime.date - if provided, only games on or after this date
-                    will be included in the returned graph
+    Parameters:
+    -----------
+    input_path : str
+        Path to the saved graph file
+    cutoff_date : datetime.date or datetime.datetime, optional
+        Filter games to include only those on or after this date
+        If None, returns the full graph without filtering
+    format : str, optional
+        Format the graph was saved in ('pickle' or 'json')
+        If None, will attempt to auto-detect format
 
     Returns:
-        filtered_graph: NetworkX graph with only games after the cutoff date
+    --------
+    networkx.Graph
+        The loaded and filtered network graph
     """
-    print(f"Loading graph from {graph_path}")
+    # First load the full graph
+    graph = load_graph(input_path, format)
 
-    # Initialize counters
-    total_games = 0
-    excluded_games = 0
+    # If no cutoff date specified, return the full graph
+    if cutoff_date is None:
+        return graph
 
-    # Determine file format based on extension and fallback to content inspection
-    path_str = str(graph_path)
-    if path_str.endswith('.pkl') or path_str.endswith('.pickle'):
-        file_format = 'pickle'
-    elif path_str.endswith('.json'):
-        file_format = 'json'
-    else:
-        # Try to detect format by looking at the first few bytes
-        try:
-            with open(graph_path, 'rb') as f:
-                first_bytes = f.read(4)
-                # JSON files typically start with { which is 0x7B in ASCII/UTF-8
-                if first_bytes.startswith(b'{') or first_bytes.startswith(b'['):
-                    file_format = 'json'
-                # Otherwise assume it's pickle
-                else:
-                    file_format = 'pickle'
-                    print(f"No recognized extension, guessing format as pickle based on content")
-        except Exception as e:
-            print(f"Error inspecting file: {e}")
-            print(f"Defaulting to pickle format")
-            file_format = 'pickle'
+    # Convert datetime to date if needed
+    if isinstance(cutoff_date, datetime):
+        cutoff_date = cutoff_date.date()
 
-    # Handle pickle format - can't easily filter during load
-    if file_format == 'pickle':
-        with open(graph_path, 'rb') as f:
-            original_graph = pickle.load(f)
+    print(f"Filtering graph to include only games on or after {cutoff_date}")
 
-        # If no cutoff date, return the full graph
-        if cutoff_date is None:
-            print(f"Loaded full graph with {len(original_graph.nodes)} nodes and {len(original_graph.edges)} edges")
-            return original_graph
+    # Find game nodes to filter
+    game_nodes = [node for node, data in graph.nodes(data=True)
+                  if data.get('type') == 'game']
 
-        # Otherwise need to filter the loaded graph
-        filtered_graph = nx.Graph()
+    # Track nodes and edges to remove
+    nodes_to_remove = []
+    excluded_count = 0
+    pgp_edge_count = 0
 
-        # First identify all game nodes to keep
-        kept_game_ids = set()
-        for node, data in original_graph.nodes(data=True):
-            if data.get('type') == 'game':
-                total_games += 1
-                game_date = data.get('game_date')
+    # Process each game node
+    for game_id in game_nodes:
+        game_data = graph.nodes[game_id]
+        game_date = game_data.get('game_date')
 
-                # Parse date if it's a string
-                if isinstance(game_date, str):
+        if game_date:
+            # Convert string dates to datetime.date objects if needed
+            if isinstance(game_date, str):
+                try:
+                    # Try standard format first
+                    game_date = datetime.strptime(game_date, '%Y-%m-%d').date()
+                except ValueError:
                     try:
-                        game_date = datetime.strptime(game_date, '%Y-%m-%d').date()
+                        # Try ISO format (used in JSON serialization)
+                        game_date = datetime.fromisoformat(game_date).date()
                     except:
-                        # If date parsing fails, keep the game
-                        kept_game_ids.add(node)
+                        # If date parsing fails, include the game
                         continue
 
-                if isinstance(game_date, datetime):
-                    game_date = game_date.date()
+            # Convert datetime to date if needed
+            if isinstance(game_date, datetime):
+                game_date = game_date.date()
 
-                # Keep game if it's on or after cutoff date
-                if cutoff_date is None or game_date is None or game_date >= cutoff_date:
-                    kept_game_ids.add(node)
-                else:
-                    excluded_games += 1
+            # Exclude game if it's before the cutoff date
+            if game_date < cutoff_date:
+                nodes_to_remove.append(game_id)
+                excluded_count += 1
 
-        # Add nodes to keep
-        for node, data in original_graph.nodes(data=True):
-            # Keep all game nodes that passed the date filter
-            if data.get('type') == 'game' and node in kept_game_ids:
-                filtered_graph.add_node(node, **data)
-            # For performance nodes, check if they belong to a kept game
-            elif isinstance(node, str) and '_' in node:
-                # Try to extract game_id from node name
-                parts = node.split('_', 1)
-                if len(parts) >= 1 and parts[0] in kept_game_ids:
-                    filtered_graph.add_node(node, **data)
-            # Keep all non-game, non-performance nodes
-            elif data.get('type') != 'game' and not any(isinstance(node, str) and node.startswith(f"{game_id}_")
-                                                        for game_id in original_graph.nodes
-                                                        if original_graph.nodes.get(game_id, {}).get('type') == 'game'):
-                filtered_graph.add_node(node, **data)
+    # Now identify all nodes and edges to be removed
+    all_nodes_to_remove = set()
+    pgp_nodes_by_game = {}
 
-        # Only add edges where both endpoints exist in filtered graph
-        for u, v, data in original_graph.edges(data=True):
-            if u in filtered_graph.nodes and v in filtered_graph.nodes:
-                filtered_graph.add_edge(u, v, **data)
+    for game_id in nodes_to_remove:
+        # Find team game performance nodes
+        if game_id in graph.nodes:
+            game_data = graph.nodes[game_id]
+            home_team = game_data.get('home_team')
+            away_team = game_data.get('away_team')
 
-    # Handle JSON format - can filter during load
-    else:  # json format
-        try:
-            with open(graph_path, 'r') as f:
-                graph_data = json.load(f)
-        except UnicodeDecodeError:
-            # If we get a unicode error, try again as pickle
-            print("Error: Failed to decode as JSON, attempting to load as pickle instead")
-            file_format = 'pickle'
-            return load_filtered_graph(graph_path, cutoff_date)  # Recursive call with corrected format
+            home_tgp = f"{game_id}_{home_team}"
+            away_tgp = f"{game_id}_{away_team}"
 
-        # Create new graph
-        filtered_graph = nx.Graph()
+            # Find player game performance nodes
+            pgp_nodes = [node for node in graph.nodes()
+                         if isinstance(node, str) and node.startswith(f"{game_id}_")
+                         and graph.nodes[node].get('type') == 'player_game_performance']
 
-        # Filter nodes during loading
-        kept_game_ids = set()
+            # Store PGP nodes by game for edge checking
+            pgp_nodes_by_game[game_id] = pgp_nodes
 
-        # First pass: identify game nodes to keep based on date
-        for node_data in graph_data['nodes']:
-            node, attrs = node_data
+            # Add all related nodes to removal set
+            all_nodes_to_remove.add(game_id)
+            all_nodes_to_remove.add(home_tgp)
+            all_nodes_to_remove.add(away_tgp)
+            all_nodes_to_remove.update(pgp_nodes)
 
-            if attrs.get('type') == 'game':
-                total_games += 1
-                game_date = attrs.get('game_date')
+    # Count and track PGP-to-PGP edges that will be removed
+    for game_id, pgp_nodes in pgp_nodes_by_game.items():
+        # Check for PGP-to-PGP edges
+        for i, node1 in enumerate(pgp_nodes):
+            for node2 in pgp_nodes[i + 1:]:
+                if graph.has_edge(node1, node2):
+                    pgp_edge_count += 1
 
-                # Parse date if it's a string
-                if isinstance(game_date, str):
-                    try:
-                        game_date = datetime.strptime(game_date, '%Y-%m-%d').date()
-                    except:
-                        # If date parsing fails, keep the game
-                        kept_game_ids.add(node)
-                        continue
+    # Remove all identified nodes (edges will be removed automatically)
+    for node in all_nodes_to_remove:
+        if node in graph.nodes:
+            graph.remove_node(node)
 
-                if isinstance(game_date, datetime):
-                    game_date = game_date.date()
+    # Update graph indices if they exist
+    if 'game_to_pgp' in graph.graph:
+        # Convert game_id strings to integers if needed
+        ids_to_remove = set()
+        for game_id in nodes_to_remove:
+            try:
+                ids_to_remove.add(int(game_id))
+            except:
+                ids_to_remove.add(game_id)
 
-                # If no cutoff or game meets criteria, add to graph
-                if cutoff_date is None or game_date is None or game_date >= cutoff_date:
-                    kept_game_ids.add(node)
-                else:
-                    excluded_games += 1
+        # Filter the game_to_pgp index
+        graph.graph['game_to_pgp'] = {
+            game_id: pgps for game_id, pgps in graph.graph['game_to_pgp'].items()
+            if game_id not in ids_to_remove
+        }
 
-        # Second pass: add filtered nodes to graph
-        for node_data in graph_data['nodes']:
-            node, attrs = node_data
+    if 'game_to_pgp_edges' in graph.graph:
+        # Convert game_id strings to integers if needed
+        ids_to_remove = set()
+        for game_id in nodes_to_remove:
+            try:
+                ids_to_remove.add(int(game_id))
+            except:
+                ids_to_remove.add(game_id)
 
-            # Game nodes - only add if they passed date filter
-            if attrs.get('type') == 'game':
-                if node in kept_game_ids:
-                    filtered_graph.add_node(node, **attrs)
-            # Performance nodes - check if they belong to a kept game
-            elif isinstance(node, str) and '_' in node:
-                # Try to extract game_id from node name
-                parts = node.split('_', 1)
-                if len(parts) >= 1 and parts[0] in kept_game_ids:
-                    filtered_graph.add_node(node, **attrs)
-            # Other nodes - add all
-            else:
-                filtered_graph.add_node(node, **attrs)
+        # Filter the game_to_pgp_edges index
+        graph.graph['game_to_pgp_edges'] = {
+            game_id: edges for game_id, edges in graph.graph['game_to_pgp_edges'].items()
+            if game_id not in ids_to_remove
+        }
 
-        # Add edges where both endpoints exist in filtered graph
-        for edge_data in graph_data['edges']:
-            u, v, attrs = edge_data
-            if u in filtered_graph.nodes and v in filtered_graph.nodes:
-                filtered_graph.add_edge(u, v, **attrs)
+    print(f"Filtered out {excluded_count} games before {cutoff_date}")
+    print(f"Removed {len(all_nodes_to_remove)} nodes and {pgp_edge_count} PGP-to-PGP edges")
+    print(f"Filtered graph now has {len(graph.nodes)} nodes and {len(graph.edges)} edges")
 
-    # Print statistics
-    remaining_games = total_games - excluded_games
-
-    print(f"Date filtering: Excluded {excluded_games} games before {cutoff_date}")
-
-    # Avoid division by zero
-    if total_games > 0:
-        percentage = (remaining_games / total_games) * 100
-        print(f"Retained {remaining_games} games ({percentage:.1f}% of total)")
-    else:
-        print(f"No game nodes found in the graph (0 total games)")
-
-    print(f"Filtered graph has {len(filtered_graph.nodes)} nodes and {len(filtered_graph.edges)} edges")
-
-    return filtered_graph
+    return graph
