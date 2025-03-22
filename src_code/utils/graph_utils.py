@@ -418,6 +418,9 @@ def update_tgp_stats(data_graph, team_tgp, period_code, player_dat):
     if player_dat.get('toi', [0, 0, 0])[period_code] > 0:
         data_graph.nodes[team_tgp]['games'][period_code] = 1
 
+    if period_code == 2:
+        data_graph.nodes[team_tgp]['games'][period_code] = 1
+
     # Update team statistics for the current period
     for stat in ['goal', 'goal_against', 'faceoff_taken', 'faceoff_won',
                  'shot_attempt', 'shot_missed', 'shot_blocked', 'shot_on_goal',
@@ -450,6 +453,9 @@ def update_pgp_stats(data_graph, player_pgp, period_code, player_dat):
 
     # Only count this as a period played if the player had time on ice
     if player_dat.get('toi', [0, 0, 0])[period_code] > 0:
+        data_graph.nodes[player_pgp]['games'][period_code] = 1
+
+    if period_code == 2:
         data_graph.nodes[player_pgp]['games'][period_code] = 1
 
     # Copy player position if available

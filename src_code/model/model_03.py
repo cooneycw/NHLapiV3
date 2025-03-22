@@ -14,6 +14,7 @@ def run_gnn_enhanced(config, config_model):
     """
     Enhanced version of run_gnn with improved model complexity, evaluation, and visualization.
     Now supports multiple window sizes for feature extraction and handles imbalanced classes better.
+    Modified to run on CPU only.
 
     Args:
         config: Configuration object with file paths
@@ -29,9 +30,6 @@ def run_gnn_enhanced(config, config_model):
     from sklearn.model_selection import train_test_split
     from collections import Counter, defaultdict
 
-    # Import additional required functions if not included yet
-    # from src_code.utils.save_graph_utils import load_filtered_graph
-
     print("====== Starting Enhanced GNN Training ======")
     print(f"Loading graph from {config.file_paths['graph']}")
     training_cutoff_date = config.split_data if hasattr(config, 'split_data') else None
@@ -43,9 +41,9 @@ def run_gnn_enhanced(config, config_model):
     # Get basic stats about the graph
     stats = get_simple_node_stats(data_graph)
 
-    # Check if CUDA is available and print device info
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
+    # Force CPU usage regardless of CUDA availability
+    device = torch.device('cpu')
+    print(f"Using device: {device} (forced CPU operation)")
 
     # Extract features for multi-task prediction with improved handling
     features, edge_list, labels_dict, node_mapping, diagnostics = extract_features_for_multi_task(
@@ -70,7 +68,7 @@ def run_gnn_enhanced(config, config_model):
     patience = config_model.patience if hasattr(config_model, 'patience') else 15  # Increased patience
     weight_decay = config_model.weight_decay if hasattr(config_model, 'weight_decay') else 1e-4
 
-    # Create the multi-task model and move to the appropriate device
+    # Create the multi-task model and move to CPU
     print(
         f"Creating multi-task GNN model with {model_data['x'].shape[1]} input features and {hidden_channels} hidden channels")
     model = MultiTaskHockeyGNN(
@@ -78,19 +76,19 @@ def run_gnn_enhanced(config, config_model):
         hidden_channels=hidden_channels,
         dropout_rate1=dropout_rate1,
         dropout_rate2=dropout_rate2
-    ).to(device)  # Move model to the appropriate device
+    ).to(device)  # Force to CPU
 
     # Create output directory for results
     output_dir = config.file_paths["gnn_analysis"]
     os.makedirs(output_dir, exist_ok=True)
     print(f"Analysis outputs will be saved to {output_dir}")
 
-    # Move data to device before training
+    # Move data to CPU device before training
     model_data['x'] = model_data['x'].to(device)
     model_data['edge_index'] = model_data['edge_index'].to(device)
     model_data['game_indices'] = model_data['game_indices'].to(device)
 
-    # Move task labels to device
+    # Move task labels to CPU device
     for task, labels in model_data['task_labels'].items():
         model_data['task_labels'][task] = labels.to(device)
 
@@ -108,7 +106,7 @@ def run_gnn_enhanced(config, config_model):
         lr=lr,
         weight_decay=weight_decay,
         patience=patience,
-        device=device  # Pass device to training function
+        device=device  # Pass CPU device to training function
     )
 
     # Print task-specific performance
@@ -265,6 +263,7 @@ def run_gnn_enhanced(config, config_model):
 def predict_game_multi_task(model, data_graph, home_team, away_team, window_sizes=[5]):
     """
     Make multi-task predictions for a game between two teams.
+    Modified to force CPU operation and handle feature dimension mismatches.
 
     Args:
         model: Trained MultiTaskHockeyGNN model
@@ -281,9 +280,11 @@ def predict_game_multi_task(model, data_graph, home_team, away_team, window_size
     # Set model to evaluation mode
     model.eval()
 
-    # Get device from model to ensure all tensors are on same device
-    device = next(model.parameters()).device
-    print(f"Model is on device: {device}")
+    # Force CPU usage
+    device = torch.device('cpu')
+    # Ensure model is on CPU
+    model = model.to(device)
+    print(f"Using device: {device} (forced CPU operation)")
 
     # Create features similar to extract_features_for_multi_task
     # Find most recent TGP nodes for each team
@@ -295,6 +296,22 @@ def predict_game_multi_task(model, data_graph, home_team, away_team, window_size
                  if isinstance(node, str) and node.endswith(f'_{away_team}')
                  and data.get('type') == 'team_game_performance']
 
+    # Check if we have data for both teams
+    if not home_tgps:
+        print(f"Warning: No TGP data found for home team {home_team}")
+    if not away_tgps:
+        print(f"Warning: No TGP data found for away team {away_team}")
+
+    if not home_tgps or not away_tgps:
+        print("Cannot make prediction without data for both teams")
+        return {
+            'regulation_win': 0.5,  # Default to 50% chance
+            'overtime_win': 0.5,
+            'shootout_win': 0.5,
+            'goes_to_overtime': 0.2,  # Default based on league average
+            'goes_to_shootout': 0.06  # Default based on league average
+        }
+
     # Sort by game date (most recent first)
     home_tgps = sorted(home_tgps,
                        key=lambda x: data_graph.nodes[x]['game_date'] if 'game_date' in data_graph.nodes[x] else 0,
@@ -304,83 +321,238 @@ def predict_game_multi_task(model, data_graph, home_team, away_team, window_size
                        key=lambda x: data_graph.nodes[x]['game_date'] if 'game_date' in data_graph.nodes[x] else 0,
                        reverse=True)
 
-    # Create features for home team
-    home_features = []
+    # Get the most recent TGP data for each team
+    home_tgp_data = data_graph.nodes[home_tgps[0]] if home_tgps else {}
+    away_tgp_data = data_graph.nodes[away_tgps[0]] if away_tgps else {}
 
-    if home_tgps:
-        home_tgp_data = data_graph.nodes[home_tgps[0]]
+    # Initialize feature arrays with the correct dimensions
+    feature_dim = 0
+    for node, data in data_graph.nodes(data=True):
+        if data.get('type') == 'team_game_performance':
+            # Find a TGP node to determine feature dimension
+            test_features = extract_team_features(data, window_sizes)
+            feature_dim = len(test_features)
+            break
 
-        for window_size in window_sizes:
-            # Feature extraction code (detailed code omitted for brevity)
-            # Use pre-calculated average values where available
-
-            # Win rates - overall
-            win_rate = 0.5  # Default
-            if f'hist_{window_size}_win_avg' in home_tgp_data:
-                if isinstance(home_tgp_data[f'hist_{window_size}_win_avg'], list):
-                    win_rate = sum(home_tgp_data[f'hist_{window_size}_win_avg']) / 3
-                else:
-                    win_rate = home_tgp_data[f'hist_{window_size}_win_avg']
-            home_features.append(win_rate)
-
-            # Complete feature extraction follows with standard stats
-            # Regulation win rate, overtime win rate, shootout win rate, etc.
-            # (All other feature extraction code same as original)
-
+    if feature_dim == 0:
+        # Fallback calculation based on window sizes
+        # Each window size has 10 features + 1 for days since last game + 1 for home/away indicator
+        feature_dim = len(window_sizes) * 10 + 2
+        print(f"Using estimated feature dimension: {feature_dim}")
     else:
-        # Default features if no historical data for home team
-        for _ in window_sizes:
-            home_features.extend([0.5, 0.5, 0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        print(f"Detected feature dimension: {feature_dim}")
 
-    # Home advantage indicator and other home team features
-    # (Rest of home team feature extraction)
+    # Extract features using the helper function
+    home_features = extract_team_features(home_tgp_data, window_sizes)
+    away_features = extract_team_features(away_tgp_data, window_sizes)
 
-    # Create features for away team (similar to home team)
-    away_features = []
+    # Ensure home features has home indicator (1.0)
+    if home_features[-1] != 1.0:
+        home_features[-1] = 1.0  # Home team
 
-    # (Away team feature extraction code)
+    # Ensure away features has away indicator (0.0)
+    if away_features[-1] != 0.0:
+        away_features[-1] = 0.0  # Away team
 
-    # Home and away features extracted...
-
-    # Combine features using NumPy first to avoid the warning
+    # Combine features using NumPy
     import numpy as np
 
-    # Convert lists to numpy arrays first
+    # Convert lists to numpy arrays
     home_features_np = np.array(home_features, dtype=np.float32)
     away_features_np = np.array(away_features, dtype=np.float32)
 
     # Create dummy game node features
-    game_features_np = np.zeros(len(home_features), dtype=np.float32)
+    game_features_np = np.zeros(feature_dim, dtype=np.float32)
     game_features_np[-1] = 0.5  # Mark as game node
+
+    # Print shapes for debugging
+    print(
+        f"Feature shapes - Home: {home_features_np.shape}, Away: {away_features_np.shape}, Game: {game_features_np.shape}")
+
+    # Before stacking, ensure all arrays have the same shape
+    if home_features_np.shape != away_features_np.shape or home_features_np.shape != game_features_np.shape:
+        print(f"Warning: Feature dimension mismatch! Fixing dimensions...")
+
+        # Make sure all arrays have the same dimension
+        max_dim = max(len(home_features_np), len(away_features_np), len(game_features_np))
+
+        # Resize arrays if needed
+        if len(home_features_np) < max_dim:
+            home_features_np = np.pad(home_features_np, (0, max_dim - len(home_features_np)), 'constant',
+                                      constant_values=0)
+        if len(away_features_np) < max_dim:
+            away_features_np = np.pad(away_features_np, (0, max_dim - len(away_features_np)), 'constant',
+                                      constant_values=0)
+        if len(game_features_np) < max_dim:
+            game_features_np = np.pad(game_features_np, (0, max_dim - len(game_features_np)), 'constant',
+                                      constant_values=0)
+            game_features_np[-1] = 0.5  # Ensure game marker is still set
+
+        print(
+            f"Adjusted feature shapes - Home: {home_features_np.shape}, Away: {away_features_np.shape}, Game: {game_features_np.shape}")
 
     # Stack features into a single array
     features_np = np.stack([home_features_np, away_features_np, game_features_np])
 
-    # Create tensor for network input and move to correct device
+    # Create tensor for network input and move to CPU
     x = torch.tensor(features_np, dtype=torch.float).to(device)
 
-    # Create edge connections and move to device
+    # Create edge connections and move to CPU
     edge_index = torch.tensor([
         [0, 2, 1, 2, 2, 0, 2, 1],  # Source nodes
         [2, 0, 2, 1, 0, 2, 1, 2]  # Target nodes
     ], dtype=torch.long).to(device)
 
-    # Game index for prediction - created directly on the right device
-    game_indices = torch.tensor([2], device=device)  # Index of the game node
+    # Game index for prediction - created directly on CPU
+    game_indices = torch.tensor([2], dtype=torch.long).to(device)  # Index of the game node
 
     # Make prediction
-    with torch.no_grad():
-        outputs = model(x, edge_index, game_indices)
+    try:
+        with torch.no_grad():
+            outputs = model(x, edge_index, game_indices)
 
-        # Get probabilities for each task
-        predictions = {}
-        for task, task_pred in outputs.items():
-            # Apply exp to get actual probabilities
-            probs = torch.exp(task_pred)
-            # Get probability of class 1 (home win or "yes")
-            predictions[task] = probs[0, 1].item()
+            # Get probabilities for each task
+            predictions = {}
+            for task, task_pred in outputs.items():
+                # Apply exp to get actual probabilities
+                probs = torch.exp(task_pred)
+                # Get probability of class 1 (home win or "yes")
+                predictions[task] = probs[0, 1].item()
 
-    return predictions
+        return predictions
+    except Exception as e:
+        print(f"Error during prediction: {str(e)}")
+        return {
+            'regulation_win': 0.5,  # Default to 50% chance
+            'overtime_win': 0.5,
+            'shootout_win': 0.5,
+            'goes_to_overtime': 0.2,
+            'goes_to_shootout': 0.06
+        }
+
+
+def extract_team_features(team_data, window_sizes):
+    """
+    Extract features for a team from team game performance data.
+
+    Args:
+        team_data: Dictionary of team game performance data
+        window_sizes: List of window sizes to use for features
+
+    Returns:
+        List of features
+    """
+    features = []
+
+    # Process each window size
+    for window_size in window_sizes:
+        # Win rates - overall
+        win_rate = 0.5  # Default
+        if f'hist_{window_size}_win_avg' in team_data:
+            if isinstance(team_data[f'hist_{window_size}_win_avg'], list):
+                win_rate = sum(team_data[f'hist_{window_size}_win_avg']) / 3
+            else:
+                win_rate = team_data[f'hist_{window_size}_win_avg']
+        features.append(win_rate)
+
+        # Win rates - specific for regulation (index 0)
+        regulation_win_rate = 0.5  # Default
+        if f'hist_{window_size}_win_avg' in team_data:
+            if isinstance(team_data[f'hist_{window_size}_win_avg'], list) and len(
+                    team_data[f'hist_{window_size}_win_avg']) > 0:
+                regulation_win_rate = team_data[f'hist_{window_size}_win_avg'][0]
+            elif not isinstance(team_data[f'hist_{window_size}_win_avg'], list):
+                regulation_win_rate = team_data[f'hist_{window_size}_win_avg']
+        features.append(regulation_win_rate)
+
+        # Win rates - specific for overtime (index 1)
+        overtime_win_rate = 0.5  # Default
+        if f'hist_{window_size}_win_avg' in team_data:
+            if isinstance(team_data[f'hist_{window_size}_win_avg'], list) and len(
+                    team_data[f'hist_{window_size}_win_avg']) > 1:
+                overtime_win_rate = team_data[f'hist_{window_size}_win_avg'][1]
+            # If it's not a list, we'll use the overall win rate
+        features.append(overtime_win_rate)
+
+        # Win rates - specific for shootout (index 2)
+        shootout_win_rate = 0.5  # Default
+        if f'hist_{window_size}_win_avg' in team_data:
+            if isinstance(team_data[f'hist_{window_size}_win_avg'], list) and len(
+                    team_data[f'hist_{window_size}_win_avg']) > 2:
+                shootout_win_rate = team_data[f'hist_{window_size}_win_avg'][2]
+            # If it's not a list, we'll use the overall win rate
+        features.append(shootout_win_rate)
+
+        # Historical goal rates - overall
+        goal_rate = 0.0  # Default
+        if f'hist_{window_size}_goal_avg' in team_data:
+            if isinstance(team_data[f'hist_{window_size}_goal_avg'], list):
+                goal_rate = sum(team_data[f'hist_{window_size}_goal_avg']) / 3
+            else:
+                goal_rate = team_data[f'hist_{window_size}_goal_avg']
+        features.append(goal_rate)
+
+        # Goal rates - specific for regulation (index 0)
+        regulation_goal_rate = 0.0  # Default
+        if f'hist_{window_size}_goal_avg' in team_data:
+            if isinstance(team_data[f'hist_{window_size}_goal_avg'], list) and len(
+                    team_data[f'hist_{window_size}_goal_avg']) > 0:
+                regulation_goal_rate = team_data[f'hist_{window_size}_goal_avg'][0]
+            elif not isinstance(team_data[f'hist_{window_size}_goal_avg'], list):
+                regulation_goal_rate = team_data[f'hist_{window_size}_goal_avg']
+        features.append(regulation_goal_rate)
+
+        # Historical goals against rates - overall
+        goals_against_rate = 0.0  # Default
+        if f'hist_{window_size}_goal_against_avg' in team_data:
+            if isinstance(team_data[f'hist_{window_size}_goal_against_avg'], list):
+                goals_against_rate = sum(team_data[f'hist_{window_size}_goal_against_avg']) / 3
+            else:
+                goals_against_rate = team_data[f'hist_{window_size}_goal_against_avg']
+        features.append(goals_against_rate)
+
+        # Goals against rates - specific for regulation (index 0)
+        regulation_goals_against_rate = 0.0  # Default
+        if f'hist_{window_size}_goal_against_avg' in team_data:
+            if isinstance(team_data[f'hist_{window_size}_goal_against_avg'], list) and len(
+                    team_data[f'hist_{window_size}_goal_against_avg']) > 0:
+                regulation_goals_against_rate = team_data[f'hist_{window_size}_goal_against_avg'][0]
+            elif not isinstance(team_data[f'hist_{window_size}_goal_against_avg'], list):
+                regulation_goals_against_rate = team_data[f'hist_{window_size}_goal_against_avg']
+        features.append(regulation_goals_against_rate)
+
+        # Add historical frequency of games going to overtime
+        overtime_freq = 0.0  # Default
+        if f'hist_{window_size}_games' in team_data:
+            if isinstance(team_data[f'hist_{window_size}_games'], list) and len(
+                    team_data[f'hist_{window_size}_games']) > 1:
+                total_games = sum(team_data[f'hist_{window_size}_games'])
+                overtime_games = team_data[f'hist_{window_size}_games'][1] + \
+                                 team_data[f'hist_{window_size}_games'][2]
+                overtime_freq = overtime_games / total_games if total_games > 0 else 0.0
+        features.append(overtime_freq)
+
+        # Add historical frequency of games going to shootout
+        shootout_freq = 0.0  # Default
+        if f'hist_{window_size}_games' in team_data:
+            if isinstance(team_data[f'hist_{window_size}_games'], list) and len(
+                    team_data[f'hist_{window_size}_games']) > 2:
+                total_games = sum(team_data[f'hist_{window_size}_games'])
+                shootout_games = team_data[f'hist_{window_size}_games'][2]
+                shootout_freq = shootout_games / total_games if total_games > 0 else 0.0
+        features.append(shootout_freq)
+
+    # Days since last game
+    if 'days_since_last_game' in team_data:
+        days_value = min(team_data['days_since_last_game'], 30) / 30  # Normalize
+        features.append(days_value)
+    else:
+        features.append(1.0)  # Default (max) days since last game
+
+    # Team indicator (will be set in the calling function)
+    features.append(0.5)  # Default placeholder
+
+    return features
 
 
 def extract_features_for_multi_task(data_graph, window_sizes=[5]):
@@ -1334,6 +1506,7 @@ def train_multi_task_model(model, data, epochs=200, lr=0.01, weight_decay=1e-4, 
     """
     Train a multi-task GNN model with early stopping.
     Now supports class weights to handle imbalanced data.
+    Modified to ensure CPU-only operation.
 
     Args:
         model: MultiTaskHockeyGNN model
@@ -1342,7 +1515,7 @@ def train_multi_task_model(model, data, epochs=200, lr=0.01, weight_decay=1e-4, 
         lr: Learning rate
         weight_decay: L2 regularization factor
         patience: Number of epochs to wait for improvement before stopping
-        device: Device to use for training (cuda or cpu)
+        device: Device to use for training (should be CPU)
 
     Returns:
         Dictionary with training history and best model state
@@ -1351,13 +1524,11 @@ def train_multi_task_model(model, data, epochs=200, lr=0.01, weight_decay=1e-4, 
 
     print(f"Training multi-task model for up to {epochs} epochs (patience={patience})...")
 
-    # If device is not provided, get it from the model
-    if device is None:
-        device = next(model.parameters()).device
+    # Force CPU usage regardless of what's passed in
+    device = torch.device('cpu')
+    print(f"Training on device: {device} (forced CPU operation)")
 
-    print(f"Training on device: {device}")
-
-    # Ensure model is on the right device
+    # Ensure model is on CPU
     model = model.to(device)
 
     # Create optimizer with weight decay
@@ -1368,17 +1539,17 @@ def train_multi_task_model(model, data, epochs=200, lr=0.01, weight_decay=1e-4, 
         optimizer, mode='max', factor=0.5, patience=patience // 2, verbose=True
     )
 
-    # Ensure data is on the correct device
+    # Ensure data is on CPU
     x = data['x'].to(device)
     edge_index = data['edge_index'].to(device)
     game_indices = data['game_indices'].to(device)
 
-    # Convert task labels to device if not already there
+    # Convert task labels to CPU device
     task_labels = {}
     for task, labels in data['task_labels'].items():
         task_labels[task] = labels.to(device)
 
-    # Move task weights to device
+    # Move task weights to CPU device
     task_weights = {}
     for task, weights in data.get('task_weights', {}).items():
         task_weights[task] = weights.to(device)
@@ -1546,22 +1717,22 @@ def train_multi_task_model(model, data, epochs=200, lr=0.01, weight_decay=1e-4, 
 def evaluate_multi_task_model(model, data, device=None):
     """
     Evaluate a multi-task GNN model with expanded metrics.
+    Modified to force CPU operation.
 
     Args:
         model: MultiTaskHockeyGNN model
         data: Dictionary containing model data
-        device: Device to use for evaluation (cuda or cpu)
+        device: Device to use for evaluation (should be CPU)
 
     Returns:
         Dictionary with metrics for each task
     """
     from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, precision_recall_fscore_support
 
-    # If device not provided, get from model
-    if device is None:
-        device = next(model.parameters()).device
+    # Force CPU usage regardless of what's passed in
+    device = torch.device('cpu')
 
-    # Ensure data is on the correct device
+    # Ensure data is on CPU
     x = data['x'].to(device)
     edge_index = data['edge_index'].to(device)
     game_indices = data['game_indices'].to(device)
@@ -1694,39 +1865,6 @@ def calculate_binary_metrics(y_pred, y_proba, y_true):
         'roc_auc': roc_auc,
         'precision': precision,
         'recall': recall
-    }
-
-
-def calculate_binary_metrics(y_pred, y_proba, y_true):
-    """
-    Calculate metrics for binary classification.
-
-    Args:
-        y_pred: Predicted class labels
-        y_proba: Predicted probability of class 1
-        y_true: True class labels
-
-    Returns:
-        Dictionary with accuracy, F1, and ROC AUC
-    """
-    from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
-
-    # Calculate accuracy
-    accuracy = accuracy_score(y_true, y_pred)
-
-    # Calculate F1 score
-    f1 = f1_score(y_true, y_pred, average='binary')
-
-    # Calculate ROC AUC
-    try:
-        roc_auc = roc_auc_score(y_true, y_proba)
-    except:
-        roc_auc = 0.5  # Default if calculation fails
-
-    return {
-        'accuracy': accuracy,
-        'f1': f1,
-        'roc_auc': roc_auc
     }
 
 

@@ -6,6 +6,7 @@ from src_code.curate.curate_01 import curate_data
 from src_code.model.model_01 import model_data, model_visualization
 from src_code.model.model_02 import run_gnn
 from src_code.model.model_03 import run_gnn_enhanced
+from src_code.model.model_04 import run_regulation_gnn
 
 
 def main():
@@ -31,7 +32,8 @@ def main():
     # curate_data(config)
     # model_data(config)
     # model_visualization(config)
-    run_gnn_enhanced(config, config_model)
+    # run_gnn_enhanced(config, config_model)
+    run_regulation_gnn(config, config_model)
 
 
 def get_data(config):
