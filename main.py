@@ -4,9 +4,9 @@ from src_code.collect.collect_01 import (get_season_data, get_team_list, get_gam
                                          get_playbyplay_data, get_player_names)
 from src_code.curate.curate_01 import curate_data
 from src_code.model.model_01 import model_data, model_visualization
-from src_code.model.model_02 import run_gnn
+from src_code.model.model_02 import run_goal_prediction_gnn
 from src_code.model.model_03 import run_gnn_enhanced
-from src_code.model.model_04 import run_regulation_gnn
+from src_code.model.model_04 import run_regulation_gnn_optimized
 
 
 def main():
@@ -33,7 +33,7 @@ def main():
     # model_data(config)
     # model_visualization(config)
     # run_gnn_enhanced(config, config_model)
-    run_regulation_gnn(config, config_model)
+    run_goal_prediction_gnn(config, config_model)
 
 
 def get_data(config):
