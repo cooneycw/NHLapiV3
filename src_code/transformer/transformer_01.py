@@ -24,7 +24,7 @@ def prepare_hockey_embeddings(config, output_dir=None, format='json'):
 
     # Set output directory (use config path if not specified)
     if output_dir is None:
-        output_dir = os.path.join(config.current_path, "storage", "output", "transformer")
+        output_dir = config.file_paths['embedding_paths']
     os.makedirs(output_dir, exist_ok=True)
 
     # Load graph with same filtering logic used in GNN code
@@ -125,7 +125,7 @@ def prepare_hockey_embeddings(config, output_dir=None, format='json'):
     output_paths = {}
 
     if format in ['json', 'both']:
-        json_path = os.path.join(output_dir, 'hockey_embeddings.json')
+        json_path = output_dir + '.json'
         with open(json_path, 'w') as f:
             json.dump(embeddings, f)
         output_paths['json'] = json_path
@@ -138,7 +138,7 @@ def prepare_hockey_embeddings(config, output_dir=None, format='json'):
         print(f"Saved CSV embeddings to {output_dir}")
 
     print("Hierarchical embedding extraction complete!")
-    return output_paths
+    return
 
 
 def extract_player_embeddings(graph, game_id, team_id, window_sizes, config):

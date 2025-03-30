@@ -64,6 +64,7 @@ class Config:
             "gnn_analysis": os.path.join(self.current_path, "storage", "analysis", "gnn_analysis"),
             "summary_excel": os.path.join(self.current_path, "storage", "output", "excel", "summary_excel"),
             "graph": os.path.join(self.current_path, "storage", "output", "graph", "graph"),
+            "embedding_paths": os.path.join(self.current_path, "storage", "output", "transformer", "hockey_embeddings"),
         }
 
         self.days_list = input_dict.get("days_list", None)

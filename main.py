@@ -5,6 +5,7 @@ from src_code.collect.collect_01 import (get_season_data, get_team_list, get_gam
 from src_code.curate.curate_01 import curate_data
 from src_code.model.model_01 import model_data, model_visualization
 from src_code.transformer.transformer_01 import prepare_hockey_embeddings
+from src_code.transformer.transformer_02 import run_transformer_model
 
 
 def main():
@@ -30,6 +31,7 @@ def main():
     # curate_data(config)
     # model_data(config)
     # model_visualization(config)
+    get_transformer_embeddings(config, format='json')  # Generate 'json', 'csv', or 'both'
     run_transformer_model(config, config_model)
 
 def get_data(config):
@@ -41,7 +43,7 @@ def get_data(config):
     get_playbyplay_data(config)
 
 
-def run_transformer_model(config, config_model):
+def get_transformer_embeddings(config):
     """
     Run the transformer-based modeling pipeline.
 
@@ -53,11 +55,8 @@ def run_transformer_model(config, config_model):
     print("Creating hierarchical embeddings...")
 
     # Step 1: Create hierarchical embeddings from graph
-    embedding_paths = prepare_hockey_embeddings(
-        config=config,
-        format='json'  # Generate both JSON and CSV outputs
-    )
-    cwc = 0
+    prepare_hockey_embeddings(config=config, format=format)
+
 
 if __name__ == '__main__':
     main()
