@@ -65,6 +65,7 @@ class Config:
             "summary_excel": os.path.join(self.current_path, "storage", "output", "excel", "summary_excel"),
             "graph": os.path.join(self.current_path, "storage", "output", "graph", "graph"),
             "embedding_paths": os.path.join(self.current_path, "storage", "output", "transformer", "hockey_embeddings"),
+            "transformer_model": os.path.join(self.current_path, "storage", "output", "transformer_model"),
         }
 
         self.days_list = input_dict.get("days_list", None)

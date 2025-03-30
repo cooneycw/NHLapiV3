@@ -1,13 +1,12 @@
 import os
-import json
-import pandas as pd
+import math
 import numpy as np
 import torch
 from torch import nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from src_code.utils.save_embeddings_utils import load_hockey_embeddings
-from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_auc_score, precision_score, recall_score, f1_score
 
 
 def run_transformer_model(config, config_transformer):
@@ -22,7 +21,7 @@ def run_transformer_model(config, config_transformer):
 
     Args:
         config: Config object with paths and settings
-        config_model: ConfigModel object with model settings
+        config_transformer: ConfigModel object with model settings
     """
     print("Starting transformer model training...")
 
@@ -48,23 +47,34 @@ def run_transformer_model(config, config_transformer):
 
     # Get feature dimension from the dataset
     sample_features, _ = dataset[0]
-    input_dim = sample_features.shape[1]  # Shape is (seq_len, input_dim)
+    # Get feature dimension from the dataset
+    sample_features, _ = dataset[0]
+    print(f"DEBUG - Sample features shape: {sample_features.shape}")
 
+    # Fix the input dimension extraction
+    if isinstance(sample_features.shape[1], tuple):
+        # If shape[1] is a tuple, take its first element
+        input_dim = sample_features.shape[1][0]
+    else:
+        # Normal case - shape[1] is a single integer
+        input_dim = int(sample_features.shape[1])
+
+    print(f"Using input dimension: {input_dim}")
     # Create model
     model = HockeyTransformer(
         input_dim=input_dim,
-        hidden_dim=128,
-        num_layers=2,
-        num_heads=4,
-        dropout=0.1
+        hidden_dim=config_transformer.hidden_dim,
+        num_layers=config_transformer.num_layers,
+        num_heads=config_transformer.num_heads,
+        dropout=config_transformer.dropout
     )
 
     # Define loss function and optimizer
     criterion = nn.BCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    optimizer = optim.Adam(model.parameters(), lr=config_transformer.lr)
 
     # Training loop
-    num_epochs = 10
+    num_epochs = config_transformer.num_epochs
     for epoch in range(num_epochs):
         # Training phase
         model.train()
@@ -119,7 +129,7 @@ def run_transformer_model(config, config_transformer):
               f'Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.4f}')
 
     # Save the model
-    model_path = os.path.join(config.current_path, "storage", "models", "hockey_transformer.pt")
+    model_path = config.file_paths['transformer_model'] + "hockey_transformer.pt"
     os.makedirs(os.path.dirname(model_path), exist_ok=True)
     torch.save(model.state_dict(), model_path)
     print(f"Model saved to {model_path}")
@@ -132,12 +142,17 @@ def run_transformer_model(config, config_transformer):
     with torch.no_grad():
         for features, targets in val_loader:
             outputs = model(features)
-            all_outputs.extend(outputs.squeeze().tolist())
+
+            # Fix tensor handling to account for different batch sizes
+            if outputs.dim() == 0:  # It's a scalar tensor
+                all_outputs.append(outputs.item())  # Use append for single values
+            else:
+                # For normal batches, ensure we only squeeze the second dimension
+                all_outputs.extend(outputs.squeeze(1).tolist())
+
             all_targets.extend(targets.tolist())
 
     # Calculate metrics
-    from sklearn.metrics import roc_auc_score, precision_score, recall_score, f1_score
-
     threshold = 0.5
     predictions = [1 if x > threshold else 0 for x in all_outputs]
 
@@ -163,6 +178,120 @@ def run_transformer_model(config, config_transformer):
     }
 
 
+class HockeyTransformer(nn.Module):
+    """
+    Transformer model for hockey game prediction.
+    """
+
+    def __init__(self, input_dim, hidden_dim=128, num_layers=2, num_heads=4, dropout=0.1):
+        """
+        Initialize the transformer model.
+
+        Args:
+            input_dim: Dimension of input features
+            hidden_dim: Dimension of transformer hidden layer
+            num_layers: Number of transformer encoder layers
+            num_heads: Number of attention heads
+            dropout: Dropout rate
+        """
+        super(HockeyTransformer, self).__init__()
+
+        # Ensure dimensions are integers
+        input_dim = int(input_dim)
+        hidden_dim = int(hidden_dim)
+        num_layers = int(num_layers)
+        num_heads = int(num_heads)
+
+        print(f"Initializing HockeyTransformer with input_dim={input_dim}, "
+              f"hidden_dim={hidden_dim}, num_layers={num_layers}, "
+              f"num_heads={num_heads}, dropout={dropout}")
+
+        # Add positional encoding for sequence information
+        self.pos_encoder = PositionalEncoding(input_dim, dropout)
+
+        # Transformer encoder layer
+        encoder_layers = []
+        for _ in range(num_layers):
+            try:
+                layer = nn.TransformerEncoderLayer(
+                    d_model=input_dim,
+                    nhead=num_heads,
+                    dim_feedforward=hidden_dim,
+                    dropout=dropout,
+                    batch_first=True
+                )
+                encoder_layers.append(layer)
+            except Exception as e:
+                print(f"Error creating transformer layer: {e}")
+                print(f"Types: input_dim={type(input_dim)}, num_heads={type(num_heads)}")
+                raise
+
+        # Transformer encoder
+        self.transformer_encoder = nn.Sequential(*encoder_layers)
+
+        # Output layer
+        self.output_layer = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        """
+        Forward pass through the model.
+
+        Args:
+            x: Input tensor of shape (batch_size, seq_len, input_dim)
+
+        Returns:
+            Output tensor of shape (batch_size, 1)
+        """
+        # Apply positional encoding
+        x = self.pos_encoder(x)
+
+        # Pass through transformer encoder layers sequentially
+        for layer in self.transformer_encoder:
+            x = layer(x)
+
+        # Use the last sequence element for prediction
+        x = x[:, -1, :]
+
+        # Pass through output layer
+        x = self.output_layer(x)
+
+        return x
+
+
+class PositionalEncoding(nn.Module):
+    """
+    Positional encoding for transformer models.
+    """
+
+    def __init__(self, d_model, dropout=0.1, max_len=100):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        # Create positional encoding matrix
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)
+
+        # Register buffer (persistent state)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        """
+        Args:
+            x: Tensor of shape [batch_size, seq_len, d_model]
+        """
+        x = x + self.pe[:, :x.size(1), :]
+        return self.dropout(x)
 class HockeyDataset(Dataset):
     """
     Dataset class for hockey game predictions.
@@ -355,69 +484,3 @@ class HockeyDataset(Dataset):
             else:
                 # If no features available, return dummy tensor
                 return torch.zeros((self.sequence_length, 10)), torch.tensor(sequence['target'], dtype=torch.float32)
-
-
-class HockeyTransformer(nn.Module):
-    """
-    Transformer model for hockey game prediction.
-    """
-
-    def __init__(self, input_dim, hidden_dim=128, num_layers=2, num_heads=4, dropout=0.1):
-        """
-        Initialize the transformer model.
-
-        Args:
-            input_dim: Dimension of input features
-            hidden_dim: Dimension of transformer hidden layer
-            num_layers: Number of transformer encoder layers
-            num_heads: Number of attention heads
-            dropout: Dropout rate
-        """
-        super(HockeyTransformer, self).__init__()
-
-        # Transformer encoder layer
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=input_dim,
-            nhead=num_heads,
-            dim_feedforward=hidden_dim,
-            dropout=dropout,
-            batch_first=True
-        )
-
-        # Transformer encoder
-        self.transformer_encoder = nn.TransformerEncoder(
-            encoder_layer=encoder_layer,
-            num_layers=num_layers
-        )
-
-        # Output layer
-        self.output_layer = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, 1),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        """
-        Forward pass through the model.
-
-        Args:
-            x: Input tensor of shape (batch_size, seq_len, input_dim)
-
-        Returns:
-            Output tensor of shape (batch_size, 1)
-        """
-        # Pass through transformer encoder
-        x = self.transformer_encoder(x)
-
-        # Use the last sequence element for prediction
-        x = x[:, -1, :]
-
-        # Pass through output layer
-        x = self.output_layer(x)
-
-        return x
-
-

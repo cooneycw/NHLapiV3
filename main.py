@@ -1,5 +1,6 @@
 from config.config import Config
 from config.config_model import ConfigModel
+from config.config_transformer import ConfigTransformer
 from src_code.collect.collect_01 import (get_season_data, get_team_list, get_game_list, get_boxscore_list,
                                          get_playbyplay_data, get_player_names)
 from src_code.curate.curate_01 import curate_data
@@ -27,12 +28,13 @@ def main():
     }
     config = Config(config_dict)
     config_model = ConfigModel()
+    config_transformer = ConfigTransformer()
     # get_data(config)
     # curate_data(config)
     # model_data(config)
     # model_visualization(config)
-    get_transformer_embeddings(config, format='json')  # Generate 'json', 'csv', or 'both'
-    run_transformer_model(config, config_model)
+    # get_transformer_embeddings(config, format='json')  # Generate 'json', 'csv', or 'both'
+    run_transformer_model(config, config_transformer)
 
 def get_data(config):
     get_season_data(config)
